@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Meinungsbildung | Lokaler PoC</title>
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="/static/styles.css">
+    <script src="/static/app.js" defer></script>
+  </head>
+  <body>
+    <header>
+      <span class="identity">Meinungsbildung</span>
+      <span class="environment">Lokaler PoC</span>
+    </header>
+    <main>
+      <section class="session" aria-labelledby="title">
+        <p class="eyebrow">Neue Sitzung</p>
+        <h1 id="title">Meinungsbildung</h1>
+        <p class="status" role="status">Verbindung wird geprueft</p>
+        <p id="detail">Dienste werden geprueft.</p>
+        <div class="actions">
+          <button id="retry" type="button">Erneut pruefen</button>
+          <button type="button" disabled>Sitzung starten</button>
+        </div>
+      </section>
+      <section class="summary" aria-labelledby="summary-title">
+        <h2 id="summary-title">Zusammenfassung</h2>
+        <p>Noch keine Sitzung.</p>
+        <button type="button" disabled>Zusammenfassung speichern</button>
+      </section>
+    </main>
+    <footer>Synthetische Demodaten</footer>
+  </body>
+</html>

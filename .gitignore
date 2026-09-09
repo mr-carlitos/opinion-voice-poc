@@ -1,0 +1,16 @@
+.env
+.env.*
+!.env.example
+.azure/
+.copilot-azure/
+.local/
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+*.log
+node_modules/
+.ruff_cache/
+artifacts/
+playwright-report/
+test-results/
