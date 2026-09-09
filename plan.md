@@ -5,6 +5,13 @@
 This section takes precedence over conflicting defaults and milestones below.
 The immediate goal is a presenter-led localhost demo, not production sign-off.
 
+- GitHub Actions and mandatory test-driven development are deferred at the
+  operator's request. Remove automated CI workflows and do not wait for remote
+  test runs or require a full suite before continuing development. Keep existing
+  local checks as optional debugging tools. Prioritize implementing and exercising
+  the real PoC locally, inspect errors directly, and distinguish unverified
+  behavior from observed success. Do not build additional test infrastructure
+  unless it resolves an immediate implementation blocker.
 - Use one Foundry prompt agent, not a Foundry hosted agent. Use a small local
   browser/FastAPI application and reuse maintained Voice Live samples where useful.
 - The operator approved delegated Microsoft Graph retrieval instead of the native
@@ -547,15 +554,12 @@ docs\
   architecture.md
   demo-script.md
   limitations.md
-.github\
-  workflows\
-    ci.yml
 ```
 
-CI should run deterministic tests and validate configuration/IaC without cloud
-credentials. Cloud integration tests should be explicitly opt-in. Do not add
-automatic deployment on every push. If deployment automation is added, use
-OIDC and an approved environment rather than long-lived Azure secrets.
+GitHub Actions is deferred for this PoC. Existing local tests remain available
+on demand; neither test-first development nor a full-suite gate is required.
+Cloud integration checks should be explicitly opt-in and run locally. Do not
+add automatic deployment on push or require remote CI status for development.
 
 ## 13. Implementation milestones
 

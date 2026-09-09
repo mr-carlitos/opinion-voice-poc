@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "uv run --frozen uvicorn app.main:app --host 127.0.0.1 --port 8000 --no-access-log",
+    "start": "uv run --frozen --no-dev uvicorn app.main:app --host 127.0.0.1 --port 8000 --no-access-log",
     "lint": "uv run --frozen ruff check . && uv run --frozen ruff format --check . && node --check app/static/app.js && node --check playwright.config.js && node --check tests/e2e/startup.spec.js",
     "test:python": "uv run --frozen pytest --junitxml=artifacts/pytest.xml",
     "test:e2e": "playwright test",

@@ -4,10 +4,18 @@ version = "0.1.0"
 description = "White-label opinion-forming voice assistant proof of concept"
 requires-python = ">=3.12,<3.14"
 dependencies = [
+    "azure-ai-projects>=2.0,<3",
+    "azure-ai-voicelive[aiohttp]>=1.2,<2",
+    "azure-identity>=1.25,<2",
     "fastapi>=0.115,<1",
+    "httpx>=0.28,<1",
     "pydantic>=2.10,<3",
+    "pypdf>=6,<7",
     "python-docx>=1.2,<2",
+    "python-dotenv>=1.1,<2",
+    "reportlab>=4.4,<5",
     "uvicorn>=0.34,<1",
+    "websockets>=15,<16",
 ]
 
 [dependency-groups]

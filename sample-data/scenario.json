@@ -1,0 +1,61 @@
+{
+  "company": "AlpenMobil Demo AG",
+  "date": "2026-09-09",
+  "topic": "Vorausschauende Instandhaltung: Vollprogramm oder Pilot?",
+  "documents": [
+    {
+      "document_id": "D01",
+      "filename": "D01-entscheidung.pdf",
+      "title": "Entscheidungsvorlage",
+      "pages": [
+        {"heading": "Drei Optionen", "paragraphs": ["AlpenMobil Demo AG ist ein erfundenes Schweizer Bahnunternehmen. Zur Diskussion stehen ein Vollprogramm fuer CHF 24 Millionen, ein gestufter Pilot fuer CHF 8 Millionen und die Fortsetzung der bisherigen Instandhaltung. Alle Zahlen sind synthetische Annahmen.", "Das Vollprogramm umfasst Sensorik, Datenplattform und die Anbindung von Werkstaetten. Es betrifft 120 fiktive Fahrzeuge. Der Pilot umfasst 30 Fahrzeuge an zwei Werkstattstandorten. Die Zahl 30 ist der eindeutige Prueffakt des Piloten.", "Die Leitung soll zwischen den drei Optionen entscheiden. Es gibt keine bereits beschlossene Vorzugsoption und keinen Auftrag an den Assistenten, eine Zustimmung herbeizufuehren."]},
+        {"heading": "Zeitplan und Entscheidung", "paragraphs": ["Der Pilot soll im Januar 2027 beginnen und nach zwoelf Monaten bewertet werden. Eine Ausweitung erfolgt nur nach einer erneuten Freigabe. Das Vollprogramm wuerde ueber drei Jahre eingefuehrt.", "Die vorgeschlagenen Pilotkriterien sind eine messbare Verringerung ungeplanter Ausfaelle, ausreichend verlaessliche Sensordaten und ein tragfaehiger Schulungsplan. Konkrete numerische Zielwerte fuer Ausfaelle sind noch nicht festgelegt.", "Offen bleibt, wer die fachliche Verantwortung fuer eine fehlerhafte Wartungsempfehlung traegt. Diese Frage ist vor Vertragsabschluss zu klaeren."]}
+      ]
+    },
+    {
+      "document_id": "D02",
+      "filename": "D02-finanzen.pdf",
+      "title": "Finanzielle Bewertung",
+      "pages": [
+        {"heading": "Investition und Rechenannahmen", "paragraphs": ["Das Vollprogramm erfordert einmalig CHF 24 Millionen. Die Finanzierungsvorlage nimmt im stabilen Betrieb jaehrlich CHF 6 Millionen Bruttonutzen und CHF 2 Millionen laufende Kosten an. Der jaehrliche Nettonutzen betraegt damit CHF 4 Millionen.", "Die einfache, nicht abgezinste Amortisationszeit betraegt im Basisszenario sechs Jahre ab stabilem Betrieb: 24 geteilt durch 4. Hochlauf, Finanzierungskosten, Steuern und Restwerte sind nicht enthalten. Dies ist keine Rentabilitaetsgarantie.", "Die 24 Millionen beinhalten den Pilotanteil von 8 Millionen, falls spaeter auf das Vollprogramm erweitert wird. Es werden nicht 24 plus 8 Millionen angesetzt. Der Pilot allein benoetigt CHF 8 Millionen und ist ein Lernvorhaben, kein verkleinertes Renditeversprechen."]},
+        {"heading": "Sensitivitaet", "paragraphs": ["Im vorsichtigen Szenario liegt der Bruttonutzen bei CHF 4 Millionen und die laufenden Kosten bleiben bei CHF 2 Millionen. Der Nettonutzen ist CHF 2 Millionen, die einfache Amortisationszeit somit zwoelf Jahre ab stabilem Betrieb.", "Die Finanzperspektive erwartet die CHF 6 Millionen Bruttonutzen erst nach vollstaendiger Einfuehrung. Die Gegenposition in D06 haelt diesen Wert wegen der Datenqualitaet fuer zu optimistisch. Dies ist ein erklaerter Annahmenkonflikt, kein Rechenfehler.", "Fuer den Pilotbetrieb werden jaehrlich CHF 0,8 Millionen laufende Kosten erwartet. Ein belastbarer Pilotnutzen ist noch nicht quantifiziert. Aussagen zu Aktienkursen, Marktanteilen oder realen Unternehmen sind nicht Bestandteil dieser Bewertung."]}
+      ]
+    },
+    {
+      "document_id": "D03",
+      "filename": "D03-betrieb.pdf",
+      "title": "Betriebliche Bewertung",
+      "pages": [
+        {"heading": "Verfuegbarkeit und Werkstaetten", "paragraphs": ["Das Ziel ist, ungeplante Ausfaelle frueher zu erkennen. Der erwartete Effekt ist bisher nicht durch einen Feldversuch belegt. Der Pilot mit 30 Fahrzeugen soll diese Wissensluecke schliessen.", "Die Einfuehrung erfordert abgestimmte Werkstattfenster. Fuer den Vollausbau werden pro Fahrzeug zwei Werkstatttage fuer Installation und Abnahme geplant. Diese Annahme ergibt bei 120 Fahrzeugen insgesamt 240 Fahrzeug-Werkstatttage, nicht 240 Kalendertage.", "Der bestehende Wartungsplan bleibt waehrend des Piloten verbindlich. Modellhinweise sind zusaetzliche Hinweise; sie ersetzen keine sicherheitsrelevanten Freigaben durch qualifiziertes Personal."]},
+        {"heading": "Abhaengigkeiten", "paragraphs": ["Die Werkstattplanung kann gleichzeitig hoechstens sechs zusaetzliche Installationen pro Monat aufnehmen. Der Pilot braucht bei voller Auslastung dieser Kapazitaet mindestens fuenf Monate fuer die Installation aller 30 Fahrzeuge.", "Eine koordinierte Einfuehrung in zwei Standorten reduziert organisatorische Komplexitaet. Fahrzeugtypen und Einsatzprofile muessen im Pilot ausgewogen vertreten sein.", "Noch offen sind die numerischen Erfolgsschwellen fuer Ausfallreduktion und Fehlalarme. Betrieb und Risikoabteilung sollen diese vor Beginn gemeinsam festlegen."]}
+      ]
+    },
+    {
+      "document_id": "D04",
+      "filename": "D04-risiken.pdf",
+      "title": "Risiken und Governance",
+      "pages": [
+        {"heading": "Daten und Sicherheit", "paragraphs": ["Wesentliche Risiken sind lueckenhafte Sensordaten, Fehlalarme, Lieferantenabhaengigkeit und unberechtigte Zugriffe. Diese Risiken sind qualitative Einschaetzungen; Eintrittswahrscheinlichkeiten wurden noch nicht beziffert.", "Als Massnahmen werden Datenqualitaetskontrollen, Rollenrechte, Protokollierung fachlicher Aenderungen und dokumentierte manuelle Rueckfallverfahren vorgeschlagen. Die Entscheidung ueber Wartung bleibt beim autorisierten Personal.", "Die Verantwortung fuer fehlerhafte Empfehlungen ist ungeklärt. Ein Vertragsentwurf zur Haftung liegt im Demokorpus nicht vor. Dazu kann aus diesen Dokumenten keine abschliessende Antwort abgeleitet werden."]},
+        {"heading": "Beschaffung und Kontrolle", "paragraphs": ["Der Pilotvertrag soll exportierbare Datenformate und ein Recht auf Datenrueckgabe vorsehen. Ein Anbieterwechsel muss ohne dauerhaften Verlust der historischen Messdaten moeglich bleiben.", "Vor einer Ausweitung sind eine dokumentierte Sicherheitspruefung, ein Datenschutzcheck und eine fachliche Abnahme erforderlich. Der Pilot ersetzt diese Freigaben nicht.", "Es ist keine reale Ausschreibung, kein reales Angebot und keine zertifizierte Sicherheitsbewertung beschrieben. Aus dem synthetischen Material folgt keine Produktionsfreigabe."]}
+      ]
+    },
+    {
+      "document_id": "D05",
+      "filename": "D05-personal.pdf",
+      "title": "Personal und Veraenderung",
+      "pages": [
+        {"heading": "Lernen und Akzeptanz", "paragraphs": ["Fuer den Pilot sind 60 Mitarbeitende mit jeweils 16 Schulungsstunden vorgesehen. Daraus ergeben sich insgesamt 960 Teilnehmendenstunden. Freistellung und Vertretung sind mit der Werkstattplanung abzustimmen.", "Beschaeftigte befuerchten zusaetzliche Dokumentationsarbeit und schwer erklaerbare Empfehlungen. Ein begleiteter Probebetrieb mit Rueckmeldemoeglichkeit soll diese Bedenken sichtbar machen.", "Ein Personalabbau ist in keinem Dokument beschlossen oder als Einsparungsannahme vorgesehen. Aussagen ueber konkrete Arbeitsplaetze oder reale Mitarbeitende lassen sich aus dem Pack nicht ableiten."]},
+        {"heading": "Kapazitaet und Beteiligung", "paragraphs": ["Die Schulungen sollen vor der eigenstaendigen Nutzung erfolgen und Beispiele fuer Fehlalarme sowie Grenzen der Technik enthalten. Fachliche Verantwortung darf nicht an das System abgegeben werden.", "Der Vollausbau wuerde erheblich mehr Koordination benoetigen. Eine belastbare Zahl der dann zu schulenden Mitarbeitenden ist noch nicht ermittelt.", "Die Personalperspektive bevorzugt einen gestuften Lernprozess, schliesst den Vollausbau bei nachgewiesenem Nutzen und gesicherter Kapazitaet aber nicht aus."]}
+      ]
+    },
+    {
+      "document_id": "D06",
+      "filename": "D06-gegenposition.pdf",
+      "title": "Unabhaengige Gegenposition",
+      "pages": [
+        {"heading": "Warum zunaechst der Pilot?", "paragraphs": ["Die unabhaengige Gegenposition empfiehlt zunaechst den CHF 8 Millionen Pilot und eine spaetere gesonderte Entscheidung ueber weitere CHF 16 Millionen. Das entspricht insgesamt CHF 24 Millionen, wenn die Ausweitung erfolgt.", "Sie rechnet fuer einen spaeteren stabilen Vollbetrieb vorsichtig mit CHF 4 Millionen Bruttonutzen statt der CHF 6 Millionen aus D02. Bei unveraenderten CHF 2 Millionen laufenden Kosten ergeben sich CHF 2 Millionen Nettonutzen und zwoelf Jahre einfache Amortisation.", "Die Abweichung betrifft die angenommene Wirksamkeit und Datenqualitaet. Beide Sichtweisen verwenden dieselbe Kostenbasis. Keine der Annahmen ist durch den noch nicht begonnenen Pilot bewiesen."]},
+        {"heading": "Einwaende gegen die eigene Position", "paragraphs": ["Ein Pilot verzoegert moegliche Vorteile des Vollausbaus. Er kann zudem wenig aussagekraeftig sein, wenn seine 30 Fahrzeuge nicht repraesentativ sind. Diese Einwaende muessen bei der Auswahl beruecksichtigt werden.", "Die Fortsetzung heutiger Praktiken vermeidet die neue Investition, liefert jedoch keine eigenen Erkenntnisse ueber den Nutzen der vorgeschlagenen Sensorik. Eine externe Entwicklung oder ein Marktvergleich wurde nicht untersucht.", "Die Gegenposition verlangt vor der Ausweitung messbare Erfolgskriterien, geklaerte Verantwortung und einen verbindlichen Schulungsplan. Sie ist eine Perspektive, keine Anweisung an die entscheidende Person."]}
+      ]
+    }
+  ]
+}

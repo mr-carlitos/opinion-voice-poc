@@ -1,7 +1,9 @@
-# Testing Strategy
+# Local Debugging
 
 Scope: mixed FastAPI API and browser UI, localhost first. No legacy tests exist.
-This first increment establishes CI, not a completed cloud voicebot.
+This is a repository foundation, not a completed cloud voicebot. GitHub Actions
+and mandatory TDD are deferred. Implement the working demo first and inspect
+runtime errors directly; use existing local checks only when helpful.
 
 ## Critical Journeys
 
@@ -23,25 +25,25 @@ This first increment establishes CI, not a completed cloud voicebot.
 - No database or Docker is required. No mock Azure/Graph response is counted as
   live evidence. Browser network-failure injection is labelled as such.
 - Unit/API tests run with `uv run pytest`; browser tests with `npm run test:e2e`.
-  `npm test` is the combined local/CI gate, including lint and format checks.
-- CI needs no Azure/M365 secrets. Pushes, pull requests, and manual dispatch run
-  the same gate. Failed commands fail the job; no continue-on-error or hidden retries.
+  `npm test` is an optional combined local check, including lint and format checks.
+  None is a mandatory development or publishing gate.
 - JUnit, HTML reports, browser console/request logs, server startup output, and
-  Playwright failure traces/screenshots let the coding assistant inspect errors.
-  CI retains synthetic test artifacts for seven days. Never capture real user
-  sessions, credentials, raw audio, or private summaries in CI artifacts.
+  Playwright failure traces/screenshots let the coding assistant inspect errors
+  locally without the operator copying them into chat. Never capture real user
+  sessions, credentials, raw audio, or private summaries in debugging artifacts.
 - If the browser cannot install or launch, report the failure separately. API
-  tests do not replace browser verification. Do not claim a green E2E gate.
+  tests do not replace browser verification. Do not claim live E2E success.
 
-## Proportionate TDD
+## Development Loop
 
-Write one focused failing check for each risky behavior, implement it, then rerun
-that check before widening scope. Keep fixtures synthetic and in memory/temporary
-directories; no real deployment IDs or secrets belong in tests. No coverage quota.
+Implement the smallest useful integration, run it locally, inspect its output,
+and repair observed failures. Do not require a new test before every feature,
+coverage targets, a complete suite run, or GitHub Actions status. Keep fixtures
+synthetic and in memory/temporary directories; no real secrets belong in tests.
 
-During an active coding session, inspect local output and GitHub Actions logs,
-repair failures, rerun locally, and push the fix. GitHub Actions reports failures
-between sessions; it does not start an autonomous coding assistant or auto-push fixes.
+Use an existing focused test or browser check when it saves debugging time.
+Retain useful local tooling without expanding the test harness for its own sake.
+Do not wait on remote CI runs or create authentication work solely for CI.
 
 ## Current Gaps
 
@@ -49,5 +51,5 @@ Voice, delegated identity, Graph retrieval/upload, approved-summary state,
 idempotent remote saves, and avatar integration are not implemented or live-tested.
 Do not add a passing placeholder for cloud tests. Add a separately opted-in local
 live test once the service adapters and approved SharePoint folders exist. Keep
-cloud tests off ordinary CI; publishing a repository does not authorize test writes
-to Microsoft 365. The full live journey above remains unverified until exercised.
+live writes explicit; publishing a repository does not authorize test writes to
+Microsoft 365. The full live journey above remains unverified until exercised.

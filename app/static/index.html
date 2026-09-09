@@ -15,21 +15,56 @@
     </header>
     <main>
       <section class="session" aria-labelledby="title">
-        <p class="eyebrow">Neue Sitzung</p>
-        <h1 id="title">Meinungsbildung</h1>
+        <p class="eyebrow">AlpenMobil Demo AG</p>
+        <h1 id="title">Eine eigene Position.</h1>
         <p class="status" role="status">Verbindung wird geprueft</p>
         <p id="detail">Dienste werden geprueft.</p>
+        <div id="login" hidden>
+          <a id="verification" target="_blank" rel="noopener noreferrer">Microsoft-Anmeldung oeffnen</a>
+          <p>Einmalcode: <strong id="device-code"></strong></p>
+        </div>
         <div class="actions">
           <button id="retry" type="button">Erneut pruefen</button>
-          <button type="button" disabled>Sitzung starten</button>
+          <button id="sign-in" type="button" disabled>Microsoft 365 anmelden</button>
+          <button id="start" type="button" disabled>Sitzung starten</button>
+          <button id="stop" type="button" disabled>Stoppen</button>
+          <button id="delete" type="button" disabled>Sitzung loeschen</button>
         </div>
+        <div class="voice-toolbar">
+          <label><input id="microphone" type="checkbox" disabled> Mikrofon</label>
+          <label><input id="playback" type="checkbox" checked> Sprachausgabe</label>
+          <span id="turn-count">0 / 30 Beitraege</span>
+        </div>
+        <ol id="transcript" aria-label="Gespraech" aria-live="polite"></ol>
+        <form id="composer">
+          <label for="message">Ihr Beitrag</label>
+          <textarea id="message" rows="2" maxlength="6000" disabled></textarea>
+          <button id="send" type="submit" disabled>Senden</button>
+          <button id="finish" type="button" disabled>Zusammenfassung erstellen</button>
+        </form>
+        <p id="session-limit" class="muted"></p>
+        <h2 class="source-heading">Freigegebene Unterlagen</h2>
+        <ul id="sources"><li>Noch keine Quellen geladen.</li></ul>
       </section>
       <section class="summary" aria-labelledby="summary-title">
         <h2 id="summary-title">Zusammenfassung</h2>
-        <p>Noch keine Sitzung.</p>
-        <button type="button" disabled>Zusammenfassung speichern</button>
+        <p id="summary-state">Noch kein Entwurf.</p>
+        <form id="review" hidden>
+          <label for="topic">Thema</label>
+          <input id="topic" maxlength="6000" required>
+          <label for="stance">Haltung zum Thema</label>
+          <textarea id="stance" rows="5" maxlength="6000" required></textarea>
+          <label for="questions">Fragen, die noch gekl&auml;rt werden m&uuml;ssen</label>
+          <textarea id="questions" rows="4"></textarea>
+          <label for="counterpositions">Gegenpositionen</label>
+          <textarea id="counterpositions" rows="4"></textarea>
+          <button id="update-draft" type="submit">Aenderungen uebernehmen</button>
+        </form>
+        <button id="save" type="button" disabled>Gepruefte Zusammenfassung speichern</button>
+        <p><a id="download" hidden target="_blank" rel="noopener noreferrer">Word-Dokument in SharePoint oeffnen</a></p>
+        <img class="briefing-image" src="/static/briefing.png" alt="Deckblatt des synthetischen AlpenMobil-Briefingpacks" width="480" height="280">
       </section>
     </main>
-    <footer>Synthetische Demodaten</footer>
+    <footer>Synthetische Demodaten &middot; Lokale Einzelnutzer-Demo &middot; Keine Produktionsfreigabe</footer>
   </body>
 </html>
