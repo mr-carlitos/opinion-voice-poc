@@ -1,9 +1,107 @@
 # White-Label Opinion-Forming Voicebot: Coding Agent Implementation Brief
 
-## Agreed demo decisions (9 September 2026)
+## Agreed demo decisions (9–10 September 2026)
 
 This section takes precedence over conflicting defaults and milestones below.
 The immediate goal is a presenter-led localhost demo, not production sign-off.
+
+### Current provisioning and consent decision (10 September 2026)
+
+- **Latest model/location decision:** the operator explicitly rejected
+  GlobalStandard and selected **GPT-5.1 `2025-11-13`, Standard in Sweden Central**
+  over newer GPT-5.x DataZoneStandard alternatives. Capacity 100 was deployed
+  after live quota/capacity checks. Runtime, summary and evidence model calls
+  use `gpt-5.1`; prompt-agent version 2 is the replacement. The previous
+  GPT-4.1-mini GlobalStandard deployment was deleted after replacement checks.
+  Provisioning rejects global SKUs. This supersedes historical model defaults below.
+- Standard processing stays within the selected Azure geography and may move
+  between regions in that geography for operations, according to current
+  Microsoft documentation. Do not imply a fixed datacenter or that changing
+  this deployment certifies all Speech/Foundry/M365 processing.
+- The live replacement probe passed Voice Live audio output for the correct
+  SharePoint fact plus structured evidence and summary. First upstream audio
+  1.29 seconds, response completion 2.42 seconds, evidence 16.4 seconds, summary
+  11.27 seconds (single sample, not an SLA). Audio remains buffered until evidence
+  validation; perceived voice latency still needs work. Microphone/browser
+  playback and the complete review/save journey remain outstanding.
+- Summary API compatibility: per-request `text.format` is rejected when using
+  `agent_reference`. The backend now requests the structured summary directly
+  from the same regional model using the existing conversation and repository
+  instructions. It does not create a second agent or switch model geography.
+- **Latest approved demo identity:** after the delegated folder checks failed,
+  the operator explicitly approved reusing a tested existing application identity
+  with Graph application `Sites.Selected` and existing site grants. Runtime
+  `GRAPH_AUTH_MODE=application` reads only the three Graph credential settings
+  from a separate ignored file; no grants or ACLs were changed. Delegated mode
+  remains available as the default for unconfigured projects.
+- This synthetic, localhost single-user mode does not enforce each participant's
+  SharePoint permissions. Session/export attribution is explicitly a local
+  application-identity demo, not a verified human owner. The per-user grounding
+  requirements below are future acceptance targets, not satisfied by this mode.
+- Real file evidence: all six manifest PDFs uploaded and read back (12 pages),
+  distinctive fact verified, synthetic Word upload/download succeeded, and a repeat
+  save reused the same item. SharePoint changed Word package metadata, so DOCX
+  verification tolerates only recognized storage metadata/serialization changes
+  while preserving authored parts. Raw DOCX byte equality is not claimed; PDFs
+  still require byte equality for retries. No complete voice-journey claim.
+- Azure login is restored. The minimal Sweden Central `rg-opinion-voice-poc`
+  Foundry account/project and GPT-4.1-mini `2025-04-14` GlobalStandard deployment,
+  capacity 20, were provisioned successfully. No Azure application hosting,
+  database or search service was created. Successful provisioning is not
+  successful app readiness, and it does not establish voice or Graph access.
+- The quota check now uses the model SKU's actual `usageName`
+  (`gpt4.1-mini`, distinct from model name `gpt-4.1-mini`). The Bicep project/model
+  child operations are serialized to avoid the observed concurrent
+  `RequestConflict`. The revoked-login blocker from 9 September is historical;
+  do not restart an Azure-login loop as the default next step.
+- The single-tenant public-client app `opinion-voice-local-demo` was created
+  without secrets or app-only permissions. The original `User.Read`,
+  `Sites.Read.All` and `Files.ReadWrite.All` requests were declared but never
+  consented. Tenant-wide admin consent returned 403. A read-only policy check found the broad
+  pair excluded from generic self-consent except for approved app IDs; this app
+  is not allowlisted.
+- The operator explicitly approved replacing the broad request with delegated
+  **`User.Read` + `Files.ReadWrite` and ordinary per-user consent**. The configured
+  registration has been migrated, and per-user consent plus Graph profile lookup
+  succeeded. Input-folder sharing-link resolution returned HTTP 403; the original
+  diagnostic discarded Graph's error code, so the exact cause is not established.
+  No document contents were read or uploaded. User consent is not intrinsically admin-only: tenant policy
+  controls it. A denied request is not permission to expand scopes or change
+  tenant policy, ACLs, directory roles or consent on the operator's behalf.
+- `python scripts/setup_m365.py --tenant-id "<tenant>"` is a read-only plan/check;
+  `--apply` creates a narrowly configured registration. Migrating only the
+  expected owned legacy registration requires explicit
+  `--apply --narrow-permissions`. The script never grants consent or directory
+  roles. Review the resulting application/scopes before device sign-in, then
+  verify one approved PDF read and synthetic DOCX upload/download. Azure CLI
+  login and the application's delegated sign-in are separate; runtime tokens
+  remain in process memory.
+- Keep `SHAREPOINT_INPUT_FOLDER_URL` and `SHAREPOINT_OUTPUT_FOLDER_URL`. Initial
+  resolution accepts approved HTTPS commercial SharePoint folder sharing links
+  through Graph `/shares`, without automatic redemption or new access grants.
+  Alternatively, pair each canonical URL with
+  `SHAREPOINT_INPUT_DRIVE_ID` / `SHAREPOINT_INPUT_FOLDER_ID` or
+  `SHAREPOINT_OUTPUT_DRIVE_ID` / `SHAREPOINT_OUTPUT_FOLDER_ID`. Pinned IDs become
+  authoritative only after Graph resolution; never infer them from sharing-link
+  text. A direct URL without its paired IDs is unsupported: no site discovery.
+  Validate folder separation using resolved canonical URLs and IDs, including
+  parent/child overlap, and fail explicitly without a local-file fallback.
+- Real sharing-link URLs are sensitive and belong only in ignored `.env`, not
+  documentation, deployment-state records or screenshots. Do not publish real
+  client IDs or deployment endpoints in generic examples.
+- `Files.ReadWrite` is not a two-folder token security boundary. Application
+  folder/manifest restrictions do not narrow the token or alter inherited ACLs.
+  Prefer a dedicated non-admin identity with only approved synthetic test access;
+  the exact library APIs may still reject the scope. `Sites.Selected` or
+  folder-selected permissions are a possible future, separately approved design
+  requiring resource grants and possible inheritance review, not today's design.
+- C2 remains labelled incomplete for this approved reduced-scope Graph route.
+  Reviewer management and multi-user privacy remain deferred, not passed.
+  Avatar stays disabled; there is no CI/full-suite gate or new completion estimate.
+  The conversational behavior remains prompt-based in `agent/instructions.md`;
+  narrower Graph consent does not create a grounding guarantee or a new agent tool.
+
+### Continuing demo constraints (9 September 2026)
 
 - GitHub Actions and mandatory test-driven development are deferred at the
   operator's request. Remove automated CI workflows and do not wait for remote
@@ -14,7 +112,7 @@ The immediate goal is a presenter-led localhost demo, not production sign-off.
   unless it resolves an immediate implementation blocker.
 - Use one Foundry prompt agent, not a Foundry hosted agent. Use a small local
   browser/FastAPI application and reuse maintained Voice Live samples where useful.
-- The operator approved delegated Microsoft Graph retrieval instead of the native
+- The operator approved Microsoft Graph retrieval instead of the native
   SharePoint grounding tool or Work IQ MCP. Read only manifest-listed PDFs from
   the configured SharePoint input folder. For this small corpus, use bounded
   text extraction and local retrieval without a separate search service. Graph
@@ -22,7 +120,7 @@ The immediate goal is a presenter-led localhost demo, not production sign-off.
   URLs, page references, and source versions; define cache refresh and limits.
   Never substitute repository PDFs as runtime knowledge or share a retrieval
   cache across user identities. Copilot Retrieval API licensing is not used;
-  normal SharePoint access and delegated Graph consent are still required.
+  normal SharePoint access and consent for the selected identity mode are required.
 - This is the explicitly approved reduced-scope retrieval route described in
   section 3.4. Retain the C2 incompleteness label until the brief is explicitly
   revised following live evidence; do not claim native SharePoint tool parity.
@@ -59,7 +157,7 @@ The immediate goal is a presenter-led localhost demo, not production sign-off.
   region, authentication, and browser/network requirements; keep avatar disabled
   by default and retain a working audio-only fallback. Skip it if it jeopardizes
   the demo deadline. No custom avatar training is required.
-- Prove delegated Graph evidence reaches the prompt agent through the selected
+- Prove Graph evidence reaches the prompt agent through the selected
   voice integration before expanding the implementation. Do not assume generic
   Voice Live function-calling samples prove prompt-agent tool compatibility.
   Backend-controlled finish/save is allowed, including spoken commands, but do
@@ -82,7 +180,8 @@ feasible. Azure Blob Storage is not the default or required output destination.
 Deliver a working GitHub-ready repository: application code, agent instructions
 and configuration, infrastructure as code (IaC), synthetic sample documents and
 their generators, tests, and setup/demo documentation. This brief is the coding
-agent's implementation input, not a claim that any resources already exist.
+agent's implementation input; the dated checkpoint above records which resources
+now exist without treating them as completed acceptance criteria.
 
 Optimize for the smallest complete vertical slice. Do not build an enterprise
 platform. Do not create a GitHub repository, publish it, or deploy chargeable
@@ -469,7 +568,9 @@ Provision the supported minimum using Bicep:
 Reuse an approved SharePoint demo site and input/output folders. Configure tenant,
 site, drive, and folder identifiers as environment settings; do not assume Bicep
 can provision SharePoint sites, M365 consent, or Graph permissions. Provide
-separate, approved setup scripts and explicit admin prerequisites for these.
+separate, approved setup scripts and document the actual consent/policy
+prerequisites. The current local path uses ordinary user consent where tenant
+policy permits, not a default tenant-wide admin-consent requirement.
 Do not provision Blob Storage solely for summary output.
 
 Keep location, model/version, deployment type/capacity, resource naming, and

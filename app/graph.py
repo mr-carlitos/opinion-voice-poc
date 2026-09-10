@@ -1,4 +1,4 @@
-import hashlib
+import base64
 import logging
 import re
 import threading
@@ -7,35 +7,96 @@ from datetime import datetime
 from urllib.parse import quote, urlsplit
 
 import httpx
-from azure.identity import DeviceCodeCredential
+from azure.identity import ClientSecretCredential, DeviceCodeCredential
 
-from app.config import Settings, folder_url
+from app.config import (
+    Settings,
+    folder_paths_overlap,
+    folder_reference,
+    folder_url,
+    validate_graph_id,
+)
+from app.document_integrity import stored_content_matches
+from app.graph_permissions import GRAPH_APPLICATION_SCOPE, GRAPH_SCOPES
 
 GRAPH = "https://graph.microsoft.com/v1.0"
-SCOPES = [
-    "https://graph.microsoft.com/Files.ReadWrite.All",
-    "https://graph.microsoft.com/Sites.Read.All",
-    "https://graph.microsoft.com/User.Read",
-]
 logger = logging.getLogger(__name__)
+
+
+class _HideSharingRequests(logging.Filter):
+    def filter(self, record):
+        # A base64url share token contains the complete sensitive sharing URL.
+        return "/shares/u!" not in record.getMessage()
+
+
+logging.getLogger("httpx").addFilter(_HideSharingRequests())
 
 
 class ServiceError(RuntimeError):
     pass
 
 
+class GraphHTTPError(ServiceError):
+    def __init__(self, response: httpx.Response):
+        self.status_code = response.status_code
+        self.codes: list[str] = []
+        request_id = response.headers.get("request-id")
+        try:
+            payload = response.json()
+        except ValueError:
+            payload = None
+        detail = payload.get("error") if isinstance(payload, dict) else None
+        for _ in range(8):
+            if not isinstance(detail, dict):
+                break
+            code = detail.get("code")
+            if (
+                isinstance(code, str)
+                and re.fullmatch(r"[A-Za-z][A-Za-z0-9_.-]{0,127}", code)
+                and code not in self.codes
+            ):
+                self.codes.append(code)
+            if not request_id:
+                request_id = detail.get("request-id")
+            detail = detail.get("innerError", detail.get("innererror"))
+        if (
+            re.search(
+                r'\berror\s*=\s*"insufficient_claims"',
+                response.headers.get("www-authenticate", ""),
+                re.IGNORECASE,
+            )
+            and "insufficient_claims" not in self.codes
+        ):
+            self.codes.append("insufficient_claims")
+        self.request_id = (
+            request_id
+            if isinstance(request_id, str) and re.fullmatch(r"[A-Za-z0-9-]{1,128}", request_id)
+            else "unavailable"
+        )
+        codes = ", ".join(self.codes) or "error code unavailable"
+        # Do not include provider messages or request URLs: they can contain sharing credentials.
+        super().__init__(f"Graph HTTP {self.status_code} ({codes}); Request-ID: {self.request_id}")
+
+
 class GraphAuth:
     def __init__(self, settings: Settings):
+        if settings.graph_auth_mode not in ("delegated", "application"):
+            raise ValueError("Ungueltiger Graph-Authentifizierungsmodus.")
+        self.settings = settings
+        self.mode = settings.graph_auth_mode
         self.lock = threading.Lock()
         self.state: dict = {"status": "signed_out"}
         self.owner: dict | None = None
-        self.credential = DeviceCodeCredential(
-            tenant_id=settings.tenant_id,
-            client_id=settings.graph_client_id,
-            prompt_callback=self.prompt,
-            disable_automatic_authentication=True,
-            timeout=600,
-        )
+        self.credential: DeviceCodeCredential | None = None
+        self.application_credential: ClientSecretCredential | None = None
+        if self.mode == "delegated":
+            self.credential = DeviceCodeCredential(
+                tenant_id=settings.tenant_id,
+                client_id=settings.graph_client_id,
+                prompt_callback=self.prompt,
+                disable_automatic_authentication=True,
+                timeout=600,
+            )
 
     def prompt(self, verification_uri: str, user_code: str, expires_on: datetime):
         with self.lock:
@@ -49,35 +110,67 @@ class GraphAuth:
     def start(self) -> dict:
         with self.lock:
             if self.state["status"] in ("starting", "pending", "signed_in"):
-                return dict(self.state)
+                return {"mode": self.mode, **self.state}
             self.state = {"status": "starting"}
         threading.Thread(target=self.authenticate, daemon=True).start()
         return self.snapshot()
 
     def authenticate(self):
         try:
-            self.credential.authenticate(scopes=SCOPES)
-            owner = Graph(self).request("GET", "/me?$select=id,displayName")
+            if self.mode == "application":
+                credentials = self.settings.application_credentials()
+                if self.application_credential is not None:
+                    self.application_credential.close()
+                self.application_credential = ClientSecretCredential(
+                    credentials.tenant_id, credentials.client_id, credentials.secret
+                )
+                self.application_credential.get_token(GRAPH_APPLICATION_SCOPE)
+                owner = {
+                    "id": f"application:{credentials.tenant_id}:{credentials.client_id}",
+                    "displayName": "Lokale Demo (Anwendungsidentitaet)",
+                }
+            else:
+                if self.credential is None:
+                    raise ServiceError("Delegierte Anmeldung ist nicht konfiguriert.")
+                self.credential.authenticate(scopes=GRAPH_SCOPES)
+                owner = Graph(self).request("GET", "/me?$select=id,displayName")
             with self.lock:
                 self.owner = owner
                 self.state = {"status": "signed_in", "name": owner["displayName"]}
         except Exception as error:
             logger.error("Graph authentication failed: %s", type(error).__name__)
+            code = re.search(r"\bAADSTS[0-9]+\b", str(error))
+            detail = f" ({code.group(0)})" if code else f" ({type(error).__name__})"
             with self.lock:
+                self.owner = None
                 self.state = {
                     "status": "error",
-                    "message": "Anmeldung fehlgeschlagen. App-ID, Mandant und Graph-Einwilligung pruefen.",
+                    "message": (
+                        "App-Authentifizierung fehlgeschlagen"
+                        if self.mode == "application"
+                        else "Anmeldung fehlgeschlagen"
+                    )
+                    + detail
+                    + ". App-ID, Mandant und Graph-Einwilligung pruefen.",
                 }
 
     def snapshot(self) -> dict:
         with self.lock:
-            return dict(self.state)
+            return {"mode": self.mode, **self.state}
 
     def token(self) -> str:
         try:
-            return self.credential.get_token(*SCOPES).token
+            if self.mode == "application":
+                if self.application_credential is None:
+                    raise ServiceError("Bitte zuerst den App-Zugriff verbinden.")
+                return self.application_credential.get_token(GRAPH_APPLICATION_SCOPE).token
+            if self.credential is None:
+                raise ServiceError("Delegierte Anmeldung ist nicht konfiguriert.")
+            return self.credential.get_token(*GRAPH_SCOPES).token
         except Exception as error:
-            raise ServiceError("Microsoft-365-Anmeldung erforderlich oder abgelaufen.") from error
+            raise ServiceError(
+                "SharePoint-Authentifizierung fehlgeschlagen; Verbindung und Zugangsdaten pruefen."
+            ) from error
 
 
 @dataclass(frozen=True)
@@ -85,6 +178,19 @@ class Folder:
     drive_id: str
     item_id: str
     url: str
+
+
+def ensure_separate_folders(source: Folder, output: Folder):
+    if (source.drive_id, source.item_id) == (output.drive_id, output.item_id):
+        raise ServiceError("Eingabe und Ausgabe zeigen auf denselben Ordner.")
+    try:
+        overlap = folder_paths_overlap(folder_url(source.url), folder_url(output.url))
+    except ValueError:
+        raise ServiceError(
+            "Graph hat keine gueltigen kanonischen Ordneradressen geliefert."
+        ) from None
+    if overlap:
+        raise ServiceError("Eingabe- und Ausgabeordner duerfen sich nicht ueberlappen.")
 
 
 class Graph:
@@ -105,35 +211,61 @@ class Graph:
             if response.status_code == 404 and missing_ok:
                 return None
             if response.is_error:
-                request_id = response.headers.get("request-id", "unbekannt")
-                logger.warning("Graph HTTP %s; request-id %s", response.status_code, request_id)
-                raise ServiceError(f"Graph HTTP {response.status_code}; Request-ID: {request_id}")
+                error = GraphHTTPError(response)
+                logger.warning("%s", error)
+                raise error
             return response.json() if response.content else {}
         except httpx.RequestError as error:
-            raise ServiceError("Graph ist nicht erreichbar oder hat das Zeitlimit ueberschritten.") from error
+            raise ServiceError(
+                "Graph ist nicht erreichbar oder hat das Zeitlimit ueberschritten."
+            ) from error
 
-    def resolve_folder(self, url: str) -> Folder:
-        host, path = folder_url(url)
-        site_path = "/".join(path.split("/")[:3])
-        site = self.request("GET", f"/sites/{host}:{quote(site_path, safe='/')}")
-        libraries = self.request("GET", f"/sites/{site['id']}/drives")
-        while True:
-            for library in libraries["value"]:
-                _, root = folder_url(library["webUrl"] + "/placeholder")
-                root = root.removesuffix("/placeholder")
-                if path.casefold().startswith(root.casefold() + "/"):
-                    relative = quote(path[len(root) + 1 :], safe="/")
-                    item = self.request("GET", f"/drives/{library['id']}/root:/{relative}")
-                    if "folder" not in item:
-                        raise ServiceError("Die konfigurierte Adresse ist kein Ordner.")
-                    return Folder(library["id"], item["id"], item["webUrl"])
-            next_url = libraries.get("@odata.nextLink")
-            if not next_url:
-                break
-            if not next_url.startswith(GRAPH + "/"):
-                raise ServiceError("Ungueltige Graph-Folgeseite.")
-            libraries = self.request("GET", next_url[len(GRAPH) :])
-        raise ServiceError("Die Dokumentbibliothek wurde nicht gefunden.")
+    def resolve_folder(self, url: str, *, drive_id: str = "", item_id: str = "") -> Folder:
+        try:
+            reference = folder_reference(url, drive_id=drive_id, item_id=item_id)
+        except ValueError as error:
+            raise ServiceError(str(error)) from None
+        if reference.sharing:
+            token = base64.urlsafe_b64encode(url.encode("utf-8")).decode("ascii").rstrip("=")
+            try:
+                item = self.request("GET", f"/shares/u!{token}/driveItem")
+            except ServiceError as error:
+                raise error from None
+        else:
+            item = self.request(
+                "GET", f"/drives/{quote(drive_id, safe='')}/items/{quote(item_id, safe='')}"
+            )
+        if (
+            not isinstance(item, dict)
+            or "remoteItem" in item
+            or not isinstance(item.get("folder"), dict)
+            or "file" in item
+        ):
+            raise ServiceError(
+                "Die konfigurierte Adresse ist kein direkter Ordner (keine Verknuepfung)."
+            )
+        parent = item.get("parentReference")
+        if not isinstance(parent, dict):
+            raise ServiceError("Graph-Ordnerantwort enthaelt keine Laufwerk-ID.")
+        try:
+            validate_graph_id(item.get("id"))
+            validate_graph_id(parent.get("driveId"))
+            canonical_host, canonical_path = folder_url(item.get("webUrl"))
+        except ValueError:
+            raise ServiceError(
+                "Graph-Ordnerantwort enthaelt ungueltige IDs oder Ordneradresse."
+            ) from None
+        if canonical_host != reference.host:
+            raise ServiceError("Graph-Ordner liegt ausserhalb des konfigurierten SharePoint-Hosts.")
+        if not reference.sharing and (
+            canonical_path.casefold() != reference.path.casefold()
+            or parent["driveId"] != drive_id
+            or item["id"] != item_id
+        ):
+            raise ServiceError(
+                "Graph-Ordner stimmt nicht mit konfigurierter Adresse und IDs ueberein."
+            )
+        return Folder(parent["driveId"], item["id"], item["webUrl"])
 
     def child(self, folder: Folder, filename: str, *, missing_ok=False):
         if not re.fullmatch(r"[A-Za-z0-9_.-]{1,160}", filename) or filename.startswith("."):
@@ -169,7 +301,9 @@ class Graph:
         if (
             parsed.scheme != "https"
             or not parsed.hostname
-            or not parsed.hostname.endswith((".sharepoint.com", ".1drv.com", ".sharepointonline.com"))
+            or not parsed.hostname.endswith(
+                (".sharepoint.com", ".1drv.com", ".sharepointonline.com")
+            )
             or parsed.username
             or parsed.password
             or parsed.port not in (None, 443)
@@ -179,8 +313,10 @@ class Graph:
     def upload(self, folder: Folder, filename: str, content: bytes) -> dict:
         existing = self.child(folder, filename, missing_ok=True)
         if existing:
-            if hashlib.sha256(self.download(folder, existing)).digest() != hashlib.sha256(content).digest():
-                raise ServiceError("Eine andere Datei belegt diesen Namen; nichts wurde ueberschrieben.")
+            if not stored_content_matches(filename, content, self.download(folder, existing)):
+                raise ServiceError(
+                    "Eine andere Datei belegt diesen Namen; nichts wurde ueberschrieben."
+                )
             return existing
         upload = self.request(
             "POST",
@@ -196,10 +332,26 @@ class Graph:
                     headers={"Content-Range": f"bytes 0-{len(content) - 1}/{len(content)}"},
                 )
             if response.status_code not in (200, 201):
-                raise ServiceError(f"Upload nicht bestaetigt: HTTP {response.status_code}. Erneut versuchen.")
+                raise ServiceError(
+                    f"Upload nicht bestaetigt: HTTP {response.status_code}. Erneut versuchen."
+                )
             item = response.json()
-            if not item.get("id") or not item.get("webUrl") or item.get("size") != len(content):
+            if (
+                not item.get("id")
+                or not item.get("webUrl")
+                or not isinstance(item.get("size"), int)
+                or item["size"] <= 0
+            ):
                 raise ServiceError("Uploadantwort unvollstaendig; Speicherung nicht bestaetigt.")
+            if filename.lower().endswith(".docx"):
+                if not stored_content_matches(filename, content, self.download(folder, item)):
+                    raise ServiceError(
+                        "Gespeicherter Word-Inhalt weicht vom freigegebenen Entwurf ab."
+                    )
+            elif item["size"] != len(content):
+                raise ServiceError("Uploadgroesse stimmt nicht mit der Quelldatei ueberein.")
             return item
         except httpx.RequestError as error:
-            raise ServiceError("Upload unterbrochen. Derselbe Speichervorgang kann wiederholt werden.") from error
+            raise ServiceError(
+                "Upload unterbrochen. Derselbe Speichervorgang kann wiederholt werden."
+            ) from error

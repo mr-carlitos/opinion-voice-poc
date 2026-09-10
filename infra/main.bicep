@@ -3,12 +3,16 @@ targetScope = 'resourceGroup'
 param location string = 'swedencentral'
 param accountName string = 'ai-opinion-${uniqueString(resourceGroup().id)}'
 param projectName string = 'opinion-voice'
-param modelName string = 'gpt-4.1-mini'
-param modelVersion string = '2025-04-14'
-param deploymentName string = 'gpt-4.1-mini'
-param deploymentSku string = 'GlobalStandard'
+param modelName string = 'gpt-5.1'
+param modelVersion string = '2025-11-13'
+param deploymentName string = 'gpt-5.1'
+@allowed([
+  'Standard'
+  'DataZoneStandard'
+])
+param deploymentSku string = 'Standard'
 @minValue(1)
-param capacity int = 20
+param capacity int = 100
 param operatorObjectId string
 
 var tags = {
@@ -33,6 +37,8 @@ resource account 'Microsoft.CognitiveServices/accounts@2025-06-01' = {
 
 resource project 'Microsoft.CognitiveServices/accounts/projects@2025-06-01' = {
   parent: account
+  // Both child operations update the account; parallel creation can return RequestConflict.
+  dependsOn: [deployment]
   name: projectName
   location: location
   identity: { type: 'SystemAssigned' }

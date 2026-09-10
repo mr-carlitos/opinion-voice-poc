@@ -33,6 +33,11 @@ async function checkReadiness() {
     if (!result.auth) throw new Error('Unerwartete Antwort des lokalen Dienstes.');
     show(result.ready ? 'Bereit zum Starten' : 'Noch nicht verbunden');
     get('detail').textContent = result.message;
+    const applicationIdentity = result.auth.mode === 'application';
+    get('sign-in').textContent = applicationIdentity ? 'App-Zugriff verbinden' : 'Microsoft 365 anmelden';
+    get('auth-mode').textContent = applicationIdentity
+      ? 'App-Identitaet: synthetische Einzelnutzer-Demo, keine benutzerbezogene SharePoint-Berechtigungspruefung.'
+      : 'Delegierter Zugriff: SharePoint-Zugriff mit Ihrem angemeldeten Konto.';
     get('sign-in').disabled = !result.can_sign_in || ['starting', 'pending', 'signed_in'].includes(result.auth.status);
     get('start').disabled = !result.ready || Boolean(sessionId);
     get('login').hidden = result.auth.status !== 'pending';

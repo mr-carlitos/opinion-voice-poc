@@ -1,4 +1,106 @@
-# PoC Handoff - 9 September 2026
+# PoC Handoff - 10 September 2026
+
+## Current resume point
+
+This section supersedes the historical 9 September notes below.
+
+- **Latest model migration, 10 September:** user selected GPT-5.1 Regional/Standard
+  in Sweden Central over newer GPT-5.x EU Data Zone alternatives. Deployment
+  `gpt-5.1`, version `2025-11-13`, Standard capacity 100 is succeeded and selected
+  in `.env` and code/IaC defaults. The superseded `gpt-4.1-mini` GlobalStandard
+  deployment was deleted after successful compatibility checks. No global fallback.
+- Prompt agent version 2 passed actual Voice Live audio generation for the
+  SharePoint fact, structured evidence checking, and summary. The API rejected
+  `text.format` overrides with an agent reference; backend summary now calls the
+  same model with the same conversation and repository instructions instead.
+- Live measured sample: corpus load 16.21s; Voice session ready 0.38s; first
+  upstream audio 1.29s; response completed 2.42s; evidence validation 16.4s;
+  summary 11.27s. Metrics are in `.local/model-check.json`; no audio persisted.
+  The probe's conversation was deleted. App buffers audio for evidence, so
+  audible latency remains unresolved. Microphone/browser playback not yet tested.
+- Model deployment geography does not certify every Speech/Foundry/M365 flow.
+  Current Standard documentation permits operations across regions within the
+  chosen Azure geography. Avoid fixed-region/datacenter or blanket EU-boundary claims.
+- Next priority is evidence-check latency and the real browser voice/text/review
+  journey using the new model. Earlier prompt version 1/model references below
+  are historical. No server was running at the start of this migration.
+- **Latest result:** the operator explicitly approved application-identity runtime
+  reuse and synthetic file checks. `GRAPH_AUTH_MODE=application` is active, using
+  the existing credential file without copying its secret into app configuration.
+  Delegated mode remains available; no consent/ACL changes were made.
+- Live file evidence: six PDFs uploaded and read back (12 pages), `30 Fahrzeuge`
+  verified, synthetic Word upload/download succeeded, and retry reused the same
+  item. SharePoint adds Word package metadata: integrity now checks authored
+  parts plus narrowly allowed metadata changes, not raw ZIP byte equality.
+  Source/stored hashes and owned item IDs are in ignored `.local` state.
+- Application mode is labelled in the UI and document attribution. It is a
+  local synthetic single-user identity, not per-user SharePoint permission
+  trimming. Full microphone/voice/text and reviewed-summary acceptance remains
+  outstanding.
+- Browser evidence: the application-mode label/connect action worked without
+  device sign-in. A real backend session was created with all six SharePoint
+  sources and versions, then deleted together with its Foundry conversation.
+  The first session attempt hit a Graph transport timeout and the successful
+  retry was slow; startup latency/reliability still needs attention.
+- The local server was started on `http://127.0.0.1:8010` as an attached CLI
+  process. Check responsiveness before restarting it; no persistent background
+  service or remote hosting was configured.
+- Azure sign-in was restored and the approved minimal Sweden Central Foundry
+  account, project, GPT-4.1-mini GlobalStandard capacity 20 and roles were
+  provisioned. The quota-key mismatch and concurrent project/model creation
+  conflict were repaired in the provisioning script and Bicep.
+- The Foundry-only diagnostic returned a completed German text response using
+  prompt agent version 1. This is not Voice Live or end-to-end evidence.
+- The public-client app registration's broad Graph requests were replaced with
+  **User.Read + Files.ReadWrite**. No app-only permissions, client secrets,
+  tenant-wide consent or SharePoint ACL changes were introduced.
+- The operator completed ordinary per-user consent. The grant is confirmed and
+  the application's Graph `/me` call succeeded. The next input-folder
+  `/shares/.../driveItem` request returned HTTP 403, request ID
+  `693557f2-89cb-441b-b601-d0a3647d1991`. No document contents read or uploaded.
+- That original error handler discarded Graph's error codes. The diagnostic now
+  preserves safe nested codes/request IDs, reports both input and output metadata
+  outcomes during `--resolve-folders`, and handles expected service errors without
+  a traceback. It does not redeem links, widen scopes or change policies.
+- New existing-access sharing links also returned 403 for both folders. The
+  operator then supplied browser address-bar URLs. A separate read-only lookup
+  with the existing Azure CLI operator login returned canonical library/folder
+  IDs for both approved folders; both were empty. This proves operator metadata
+  access, not runtime app access. No app consent or ACL changes were made.
+- Ignored `.env` now uses those canonical URLs and verified IDs instead of
+  sharing links. Discovery provenance is in ignored
+  `.local/sharepoint-folder-discovery.json`. The runtime app's unchanged
+  `User.Read` + `Files.ReadWrite` direct-ID check also returned HTTP 403
+  `accessDenied` for both folders, after successful sign-in and `/me`.
+  The input request ID was `958a04ec-1958-453d-acd3-68e0181ee664`; output was
+  `39d926b2-c211-403e-b821-592a05c74149`. Sharing-link resolution is therefore
+  not the sole blocker. Stop repeated sign-ins/link changes and review the
+  app-specific authorization or policy. A selected-site/folder permission route
+  needs separate approval and authorized resource grants; do not implement it
+  automatically or substitute operator credentials for runtime reads/uploads.
+- Reference comparison: the public Ruling Radar repository uses client-credentials
+  authentication and application `Sites.Selected`, rather than delegated user
+  tokens. An operator-owned registration matching its manifest was found; its
+  actual Graph application `Sites.Selected` grant was confirmed. A site-grant
+  listing under the operator identity was denied, so the write role is unknown.
+- With the operator's explicitly supplied existing credential in ignored
+  `.env.agenticrulingradar`, an isolated app-only check successfully resolved both
+  approved folders by their verified IDs. No document contents read, no uploads
+  or permission changes, no runtime authentication switch. The old app's separate
+  broad delegated grants were not used. Secret values were not displayed or
+  copied into this document. Metadata success does not establish write access.
+- The operator subsequently approved reusing the existing application identity;
+  the current runtime/file results are recorded at the top of this note.
+  Do not describe guessed causes or successful consent as successful file access.
+- Configuration is in ignored `.env`. Sharing links and tokens must not be
+  copied into docs or logs. Tokens remain in memory; a new diagnostic invocation
+  needs a fresh app sign-in, not another Azure CLI login.
+- Background agents were cancelled after partial edits. Main assistant took
+  over directly; there are no background coding agents. The local server state
+  is described above and must be checked on resume. Changes are uncommitted.
+  See [setup.md](setup.md).
+
+## Historical checkpoint - 9 September 2026
 
 ## Pause and estimate
 

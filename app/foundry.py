@@ -81,14 +81,15 @@ class Foundry:
 
     def summary(self, conversation_id: str, corpus: Corpus) -> OpinionSummary:
         response = self.client.responses.create(
+            model=self.settings.model,
             conversation=conversation_id,
+            instructions=(ROOT / "agent/instructions.md").read_text(),
             input="Erstelle den Entwurf der Meinungsbildung als JSON. Nur explizite Nutzerpositionen "
             "als Haltung darstellen; sonst unentschieden. Beruecksichtige alle gesprochenen und "
             "getippten Beitraege und die letzte Aenderung. Keine Speicherbestaetigung.",
             text={"format": strict_schema(OpinionSummary)},
             max_output_tokens=3500,
             truncation="disabled",
-            extra_body={"agent_reference": {"type": "agent_reference", "name": self.settings.agent_name, "version": self.version}},
         )
         if response.status != "completed":
             raise ServiceError("Zusammenfassung wurde nicht vollstaendig erzeugt.")

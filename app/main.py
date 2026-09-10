@@ -11,7 +11,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from app.config import ROOT, Settings
 from app.export import OpinionSummary
 from app.foundry import Foundry
-from app.graph import Graph, GraphAuth, ServiceError
+from app.graph import Graph, GraphAuth, ServiceError, ensure_separate_folders
 from app.grounding import load_corpus
 from app.sessions import Session
 from app.voice import bridge
@@ -19,7 +19,7 @@ from app.voice import bridge
 STATIC_DIR = ROOT / "app/static"
 settings = Settings.load()
 browser_key = secrets.token_urlsafe(32)
-auth = GraphAuth(settings) if settings.tenant_id and settings.graph_client_id else None
+auth = GraphAuth(settings) if not settings.graph_issues() else None
 foundry = Foundry(settings) if settings.project_endpoint and settings.tenant_id else None
 sessions: dict[str, Session] = {}
 logger = logging.getLogger(__name__)
@@ -39,8 +39,14 @@ def same_origin(origin: str | None, host: str) -> bool:
 @app.middleware("http")
 async def local_guard(request: Request, call_next):
     if request.method not in ("GET", "HEAD"):
-        if request.cookies.get("local_session") != browser_key or request.headers.get("x-local-client") != "1" or not same_origin(request.headers.get("origin"), request.headers.get("host", "")):
-            return JSONResponse(status_code=403, content={"message": "Nur lokale Browseraktionen sind erlaubt."})
+        if (
+            request.cookies.get("local_session") != browser_key
+            or request.headers.get("x-local-client") != "1"
+            or not same_origin(request.headers.get("origin"), request.headers.get("host", ""))
+        ):
+            return JSONResponse(
+                status_code=403, content={"message": "Nur lokale Browseraktionen sind erlaubt."}
+            )
     response = await call_next(request)
     response.headers["Cache-Control"] = "no-store"
     response.headers["X-Content-Type-Options"] = "nosniff"
@@ -56,7 +62,13 @@ async def service_error(request: Request, error: ServiceError):
 @app.exception_handler(Exception)
 async def unexpected_error(request: Request, error: Exception):
     logger.error("Operation %s failed: %s", request.url.path, type(error).__name__)
-    return JSONResponse(status_code=502, content={"message": f"Dienstaufruf fehlgeschlagen ({type(error).__name__}). Anmeldung, Endpunkte und Berechtigungen pruefen."})
+    return JSONResponse(
+        status_code=502,
+        content={
+            "message": f"Dienstaufruf fehlgeschlagen ({type(error).__name__}). "
+            "Anmeldung, Endpunkte und Berechtigungen pruefen."
+        },
+    )
 
 
 @app.get("/healthz")
@@ -67,14 +79,24 @@ def health() -> dict[str, str]:
 @app.get("/api/readiness")
 def readiness() -> JSONResponse:
     issues = settings.issues()
-    state = auth.snapshot() if auth else {"status": "not_configured"}
+    state = (
+        auth.snapshot()
+        if auth
+        else {
+            "status": "not_configured",
+            "mode": settings.graph_auth_mode,
+        }
+    )
     return JSONResponse(
         status_code=503 if issues else 200,
         content={
             "ready": not issues and state["status"] == "signed_in",
             "code": "configuration_required" if issues else "configured",
-            "message": "; ".join(issues) if issues else "Konfiguriert. Dienste werden beim Sitzungsstart geprueft.",
-            "can_sign_in": auth is not None, "auth": state,
+            "message": "; ".join(issues)
+            if issues
+            else "Konfiguriert. Dienste werden beim Sitzungsstart geprueft.",
+            "can_sign_in": auth is not None,
+            "auth": state,
         },
     )
 
@@ -82,7 +104,7 @@ def readiness() -> JSONResponse:
 @app.post("/api/auth/start")
 def sign_in():
     if not auth:
-        raise HTTPException(503, "AZURE_TENANT_ID und GRAPH_CLIENT_ID fehlen.")
+        raise HTTPException(503, "Graph-Konfiguration fehlt oder ist ungueltig.")
     return auth.start()
 
 
@@ -99,14 +121,19 @@ def mark_editing(session_id: str):
 @app.post("/api/sessions")
 def create_session():
     if settings.issues() or not auth or not auth.owner or not foundry:
-        raise HTTPException(503, "Konfiguration und Microsoft-365-Anmeldung erforderlich.")
+        raise HTTPException(503, "Konfiguration und SharePoint-Verbindung erforderlich.")
     if len(sessions) >= 3:
-        raise HTTPException(409, "Bitte eine vorhandene Sitzung loeschen; maximal drei lokale Sitzungen.")
+        raise HTTPException(
+            409, "Bitte eine vorhandene Sitzung loeschen; maximal drei lokale Sitzungen."
+        )
     graph = Graph(auth)
-    source = graph.resolve_folder(settings.input_url)
-    output = graph.resolve_folder(settings.output_url)
-    if source.drive_id == output.drive_id and source.item_id == output.item_id:
-        raise ServiceError("Eingabe und Ausgabe zeigen auf denselben Ordner.")
+    source = graph.resolve_folder(
+        settings.input_url, drive_id=settings.input_drive_id, item_id=settings.input_folder_id
+    )
+    output = graph.resolve_folder(
+        settings.output_url, drive_id=settings.output_drive_id, item_id=settings.output_folder_id
+    )
+    ensure_separate_folders(source, output)
     corpus = load_corpus(graph, source)
     foundry.configure_agent()
     session = Session(auth.owner, foundry.create_conversation(corpus), corpus, output)
@@ -164,7 +191,9 @@ def delete_session(session_id: str):
 
 @app.websocket("/api/sessions/{session_id}/voice")
 async def voice(socket: WebSocket, session_id: str):
-    if socket.cookies.get("local_session") != browser_key or not same_origin(socket.headers.get("origin"), socket.headers.get("host", "")):
+    if socket.cookies.get("local_session") != browser_key or not same_origin(
+        socket.headers.get("origin"), socket.headers.get("host", "")
+    ):
         await socket.close(code=1008)
         return
     session = get_session(session_id)
@@ -180,7 +209,13 @@ async def voice(socket: WebSocket, session_id: str):
     except Exception as error:
         logger.error("Voice bridge failed: %s", type(error).__name__)
         try:
-            await socket.send_json({"type": "error", "message": f"Sprachverbindung fehlgeschlagen ({type(error).__name__}). Endpunkt, Rollen und Modell pruefen."})
+            await socket.send_json(
+                {
+                    "type": "error",
+                    "message": f"Sprachverbindung fehlgeschlagen ({type(error).__name__}). "
+                    "Endpunkt, Rollen und Modell pruefen.",
+                }
+            )
         except Exception:
             pass
     finally:
