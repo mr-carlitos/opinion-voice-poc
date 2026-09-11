@@ -5,7 +5,9 @@
 **The approved application-identity SharePoint path now works.** Six synthetic
 PDFs were uploaded and read back (12 pages), the `30 Fahrzeuge` fact was verified,
 and a synthetic Word upload/download plus duplicate-free retry succeeded.
-The complete voice/text/review journey is still unverified.
+The complete voice/text/review journey subsequently passed with synthetic
+microphone input in full Chromium and actual cloud services. A human microphone
+and speaker rehearsal remains required; response latency is still noticeable.
 
 **Azure provisioning succeeded; application readiness is still UNVERIFIED.**
 Azure CLI login is restored. The approved Sweden Central `rg-opinion-voice-poc`
@@ -246,6 +248,15 @@ and [authorization error guidance](https://learn.microsoft.com/en-us/graph/resol
 
 ## Remaining live checks
 
+Session startup now reuses HTTP connections only within the current Graph load.
+It consumes each freshly returned file-download URL immediately rather than
+requesting that metadata again. URLs and corpus snapshots are not cached between
+identities/sessions, and source IDs/versions are rechecked after downloading each
+PDF. In one same-corpus comparison the six-PDF load fell from 16.27s to 4.84s;
+Graph metadata requests fell from 19 to 13 including input-folder resolution.
+These are observed samples, not latency guarantees. The session-creation response
+includes `startup_seconds` for folder, corpus, agent and conversation stages.
+
 1. Run the read-only registration plan, perform the explicitly approved narrow
    migration if still required, and review the resulting app/scopes.
 2. Review the dedicated test identity, both folder destinations and intended
@@ -299,18 +310,29 @@ Owned item IDs are recorded under ignored `.local/`; no script deletes the site.
 ## Browser journey
 
 Open the localhost URL, select **App-Zugriff verbinden** (or sign in to Microsoft
-365 in delegated mode), and start a session. Enable
-the microphone for spoken input, or type. Finish with the button or say
+365 in delegated mode), and start a session. Select **Mikrofon einschalten**
+for spoken input; select **Mikrofon stummschalten** to stop capture.
+**Ton ausschalten/einschalten** separately controls playback. You can also type.
+Finish with the button or say "OK, jetzt Zusammenfassung erstellen",
 "Bitte meine Meinungsbildung zusammenfassen". Review and optionally edit the
 three sections, apply edits, then click save or say "Ja, bitte speichern".
 An unqualified "yes" does not authorize a save. A confirmed Graph result is
 required before showing a saved file link. Verify final access in SharePoint.
+
+Review edits carry their draft version. While an edit is being acknowledged or
+applied, save remains disabled. Once a save freezes a draft, even a failed upload
+does not allow silent modification of that version; retry sends the same bytes.
+After connection/request failure, the browser fetches the authoritative draft
+snapshot. An old spoken approval cannot authorize a newer edited draft.
 
 Use Stop to release the microphone and voice connection. Delete the session to
 delete the Foundry conversation and local state; this does not delete saved
 SharePoint files. A process restart loses the in-memory session inventory.
 Service-side conversations may remain after a crash: remove them in Foundry
 and delete only the PoC's explicitly recorded files after the demo.
+The same voice session cannot reconnect: this prevents duplicate greetings and
+ambiguous response history. HTTP review/save recovery is still available after
+voice disconnect; delete and start a new session to resume conversation.
 
 ## Limits and verification
 
@@ -320,7 +342,7 @@ and delete only the PoC's explicitly recorded files after the demo.
   semantic index. Source changes appear in a new session. Permission revocation
   is not rechecked mid-session. Do not claim live permission trimming.
 - Up to 30 user turns, 30000 user-text characters, and 30 minutes per session.
-- Assistant audio is buffered until an additional model evidence check passes.
+- In default `strict` mode assistant audio is buffered until an additional model evidence check passes.
   This increases latency; that check reduces but cannot eliminate unsupported
   claims. It is not proof that all factual statements are correct.
 - Voice SDK, conversation continuity, microphone, spoken confirmation and real
@@ -329,7 +351,83 @@ and delete only the PoC's explicitly recorded files after the demo.
   Consent narrowing does not change the agent instructions or establish guaranteed
   grounding. C2 remains reduced-scope/incomplete; reviewer management and
   multi-user privacy (including A15/A17) are deferred and unverified.
-- Avatar remains disabled and unimplemented. Get the voice/text/save baseline
-  working first. This is a prompt agent, not a hosted agent.
+- Native stock-avatar transport is implemented, opt-in and disabled by default;
+  real media acceptance is still blocked (see the dated note below).
+  This is a prompt agent, not a hosted agent.
 - GitHub Actions is disabled. Use server output and local browser diagnostics;
   no CI wait, test-first requirement, or automatic cloud tests are involved.
+
+## Native avatar / streaming v2 (11 September 2026)
+
+### Avatar diagnostics
+
+Restart the server and hard-refresh the browser after changing diagnostic code.
+Reproduce the connection failure once. The UI shows a **Diagnose-ID**, shared by
+the terminal message and the record in ignored `.local/diagnostics.jsonl`.
+Read the last records from the repository root:
+
+```bash
+tail -n 5 .local/diagnostics.jsonl
+```
+
+Records contain the failure stage/reason, browser connection/ICE/gathering/
+signaling states, elapsed time, whether offer/answer were exchanged, codec
+support, track counts and up to eight ICE error codes/messages. Browser API
+exceptions retain their name and redacted message. When Azure supplies an error,
+its code, redacted message, parameter, nested error details and available
+session/event/request identifiers are retained. Unexpected bridge exceptions
+include redacted messages and file/function/line frames, never local variables.
+
+Browser DevTools Console also shows `[Avatar diagnostic]` before the peer is
+closed. This is useful if the WebSocket cannot deliver its report to the backend.
+Do not confuse a browser-reported failure with an Azure service error:
+`peer_failed`, `remote_description_failed`, `playback_failed`,
+`browser_handshake_timeout`, and `h264_unsupported` identify different stages.
+An ICE error on one endpoint alone does not terminate negotiation; it is retained
+as evidence if the connection ultimately fails.
+
+Raw SDP, ICE credentials, service tokens, URLs/IPs and arbitrary raw event fields
+are not recorded. The file is written with private permissions, rotates at about
+2 MB into `.local/diagnostics.previous.jsonl`, and is not a cloud telemetry service.
+Treat even redacted diagnostic files as local operational information; review
+before sharing. File-write failures are explicitly reported in the terminal.
+Do not turn on blanket WebSocket/HTTP debug logging to diagnose this problem.
+
+The safe defaults remain `VOICE_DELIVERY_MODE=strict` and
+`VOICE_AVATAR_ENABLED=false`. For the approved synthetic streaming demo, explicitly
+set `VOICE_DELIVERY_MODE=streaming` and `VOICE_AVATAR_ENABLED=true` before starting
+the local server. The user must also select **Avatar verwenden** before creating
+each session. Strict mode never accepts an avatar session. An unchecked selection
+uses ordinary PCM audio even when the server capability is enabled.
+
+The stock character is `lisa`, style `casual-sitting`, not a custom likeness.
+Native media uses the same Voice Live prompt-agent conversation, not a separate
+synthesizer or model. No deployment, region, grants or service identity change is
+needed by the local code. Existing GPT-5.1 Standard in Sweden Central is unchanged.
+
+`GET /api/readiness` exposes `avatar_available`; `POST /api/sessions` accepts
+`{"avatar_enabled": true}` (omitting it means audio-only). The server sends only
+bounded `avatar_start` ICE configuration and `avatar_answer` SDP. The browser sends
+`avatar_offer`, then `avatar_ready` after connected audio/video tracks. SDP is
+base64 JSON `{type,sdp}`, at most 131072 encoded characters. Credentials stay
+server-side except required transient ICE credentials; no ICE/SDP is logged.
+Unknown browser events cannot be forwarded to Voice Live.
+
+The greeting is withheld until media readiness. No PCM is forwarded in avatar
+sessions. Browser negotiation expires after 30 seconds; the backend watchdog
+expires after 35 seconds. Interrupt silences local media and clears the native
+output buffer. Stop/disconnect closes the peer and upstream connection. Failure
+offers **Neue Sitzung ohne Avatar vorbereiten**, deleting only the failed local
+conversation before returning to an unchecked audio-only startup choice. It never
+silently replays partial speech or changes assurance mode.
+
+**Live blocker:** the existing resource supplied ICE configuration but returned
+`avatar_service_internal_error` during native negotiation, before an SDP answer
+or any video frames. The error alone does not establish a regional, quota or
+network root cause. Do not claim avatar support verified on this resource.
+An explicitly unchecked audio-only session on the same resource did complete a
+streamed greeting. Physical microphone/speaker and avatar acceptance remain open.
+
+Streaming conversational output has **no independent pre-speech evidence check**;
+the UI labels that limitation. Both modes semantically validate generated and
+edited final summaries and retain version-bound human save approval.

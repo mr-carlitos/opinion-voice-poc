@@ -2,6 +2,7 @@ import base64
 import logging
 import re
 import threading
+from contextlib import nullcontext
 from dataclasses import dataclass
 from datetime import datetime
 from urllib.parse import quote, urlsplit
@@ -25,8 +26,17 @@ logger = logging.getLogger(__name__)
 
 class _HideSharingRequests(logging.Filter):
     def filter(self, record):
-        # A base64url share token contains the complete sensitive sharing URL.
-        return "/shares/u!" not in record.getMessage()
+        # Sharing tokens and preauthenticated file-transfer URLs are credentials.
+        message = record.getMessage()
+        return not any(
+            marker in message
+            for marker in (
+                "/shares/u!",
+                ".sharepoint.com/",
+                ".sharepointonline.com/",
+                ".1drv.com/",
+            )
+        )
 
 
 logging.getLogger("httpx").addFilter(_HideSharingRequests())
@@ -196,12 +206,27 @@ def ensure_separate_folders(source: Folder, output: Folder):
 class Graph:
     def __init__(self, auth: GraphAuth):
         self.auth = auth
+        self._client: httpx.Client | None = None
+
+    def __enter__(self):
+        if self._client is not None:
+            raise RuntimeError("Graph connection scope is already open.")
+        self._client = httpx.Client(timeout=45)
+        return self
+
+    def __exit__(self, *args):
+        if self._client is not None:
+            self._client.close()
+            self._client = None
+
+    def _connection(self):
+        return nullcontext(self._client) if self._client is not None else httpx.Client(timeout=45)
 
     def request(self, method: str, path: str, *, body=None, missing_ok=False):
         if not path.startswith("/") or path.startswith("//"):
             raise ValueError("Graph requests must use relative paths")
         try:
-            with httpx.Client(timeout=45) as client:
+            with self._connection() as client:
                 response = client.request(
                     method,
                     GRAPH + path,
@@ -279,18 +304,26 @@ class Graph:
     def download(self, folder: Folder, item: dict, *, limit=2_000_000) -> bytes:
         if item.get("size", limit + 1) > limit:
             raise ServiceError("Datei ueberschreitet das PoC-Groessenlimit.")
-        metadata = self.request("GET", f"/drives/{folder.drive_id}/items/{item['id']}")
+        # Use the URL from the just-fetched item immediately; never cache or persist it.
+        metadata = (
+            item
+            if item.get("@microsoft.graph.downloadUrl")
+            else self.request("GET", f"/drives/{folder.drive_id}/items/{item['id']}")
+        )
         url = metadata.get("@microsoft.graph.downloadUrl", "")
         self.validate_transfer_url(url)
         content = bytearray()
         try:
-            with httpx.stream("GET", url, timeout=45) as response:
-                if response.status_code != 200:
-                    raise ServiceError(f"Dateidownload fehlgeschlagen: HTTP {response.status_code}")
-                for chunk in response.iter_bytes():
-                    content.extend(chunk)
-                    if len(content) > limit:
-                        raise ServiceError("Datei ueberschreitet das PoC-Groessenlimit.")
+            with self._connection() as client:
+                with client.stream("GET", url) as response:
+                    if response.status_code != 200:
+                        raise ServiceError(
+                            f"Dateidownload fehlgeschlagen: HTTP {response.status_code}"
+                        )
+                    for chunk in response.iter_bytes():
+                        content.extend(chunk)
+                        if len(content) > limit:
+                            raise ServiceError("Datei ueberschreitet das PoC-Groessenlimit.")
         except httpx.RequestError as error:
             raise ServiceError("Dateidownload unterbrochen; bitte erneut versuchen.") from error
         return bytes(content)

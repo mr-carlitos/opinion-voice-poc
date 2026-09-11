@@ -148,6 +148,8 @@ class Settings:
     output_folder_id: str = ""
     graph_auth_mode: str = "delegated"
     graph_application_credentials_file: str = ""
+    voice_delivery_mode: str = "strict"
+    avatar_enabled: bool = False
 
     @classmethod
     def load(cls) -> "Settings":
@@ -169,6 +171,8 @@ class Settings:
             output_folder_id=os.getenv("SHAREPOINT_OUTPUT_FOLDER_ID", ""),
             graph_auth_mode=os.getenv("GRAPH_AUTH_MODE", "delegated").strip().lower(),
             graph_application_credentials_file=os.getenv("GRAPH_APPLICATION_CREDENTIALS_FILE", ""),
+            voice_delivery_mode=os.getenv("VOICE_DELIVERY_MODE", "strict").strip().lower(),
+            avatar_enabled=os.getenv("VOICE_AVATAR_ENABLED", "false").strip().lower() == "true",
         )
 
     def application_credentials_path(self) -> Path:
@@ -272,6 +276,8 @@ class Settings:
         }
         issues = [f"{name} fehlt" for name, value in required.items() if not value]
         issues.extend(self.graph_issues())
+        if self.voice_delivery_mode not in ("strict", "streaming"):
+            issues.append("VOICE_DELIVERY_MODE muss strict oder streaming sein.")
         issues.extend(self.folder_issues())
         for endpoint in (self.project_endpoint, self.voice_endpoint):
             if endpoint:

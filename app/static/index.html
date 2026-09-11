@@ -6,6 +6,7 @@
     <title>Meinungsbildung | Lokaler PoC</title>
     <link rel="icon" href="data:,">
     <link rel="stylesheet" href="/static/styles.css">
+    <script src="/static/avatar.js" defer></script>
     <script src="/static/app.js" defer></script>
   </head>
   <body>
@@ -17,9 +18,45 @@
       <section class="session" aria-labelledby="title">
         <p class="eyebrow">AlpenMobil Demo AG</p>
         <h1 id="title">Eine eigene Position.</h1>
+        <p class="intro">Gedanken aussprechen. Perspektiven abwaegen. Die eigene Haltung festhalten.</p>
+        <section class="conversation-stage" aria-labelledby="stage-title">
+          <div class="stage-heading">
+            <h2 id="stage-title">Ihr Denkpartner</h2>
+            <span id="conversation-state" data-state="idle" aria-live="polite">Noch keine Sitzung</span>
+          </div>
+          <div class="avatar-frame">
+            <video id="avatar-video" muted playsinline hidden aria-label="Video des virtuellen Denkpartners"></video>
+            <div id="avatar-placeholder">
+              <svg class="conversation-mark" viewBox="0 0 160 120" aria-hidden="true" focusable="false">
+                <rect x="20" y="20" width="90" height="60" rx="24"></rect>
+                <path d="M40 76v18l23-16M68 48h56a18 18 0 0 1 18 18v15a18 18 0 0 1-18 18h-8v12l-18-12"></path>
+                <circle cx="45" cy="49" r="3"></circle><circle cx="65" cy="49" r="3"></circle><circle cx="85" cy="49" r="3"></circle>
+              </svg>
+              <strong>Raum fuer Ihre Gedanken</strong>
+              <p>Per Stimme oder Text – Sie bestimmen das Tempo.</p>
+            </div>
+          </div>
+          <div class="avatar-options">
+            <label for="avatar-enabled"><input id="avatar-enabled" type="checkbox" disabled aria-describedby="avatar-state"> Avatar verwenden</label>
+            <span id="avatar-state" class="muted">Audio-Modus · Avatar noch nicht verfuegbar.</span>
+            <button id="avatar-fallback" type="button" hidden>Neue Sitzung ohne Avatar vorbereiten</button>
+          </div>
         <p class="status" role="status">Verbindung wird geprueft</p>
+        <div class="voice-toolbar" role="group" aria-label="Gespraechssteuerung">
+          <button id="microphone" type="button" aria-pressed="false" aria-describedby="voice-hint" disabled>Mikrofon einschalten</button>
+          <button id="interrupt" type="button" disabled>Antwort unterbrechen</button>
+          <button id="playback" type="button" aria-pressed="true">Ton ausschalten</button>
+          <button id="finish" type="button" disabled>Zusammenfassung erstellen</button>
+          <p id="voice-hint">Nach dem Sitzungsstart Mikrofon einschalten und einfach sprechen.</p>
+          <p class="spoken-helper">Zum Abschluss sagen: <q>OK, jetzt Zusammenfassung erstellen</q></p>
+          <span id="turn-count">0 / 30 Beitraege</span>
+        </div>
+        </section>
+        <details class="connection-panel" open>
+        <summary>Verbindung &amp; Sitzung</summary>
         <p id="detail">Dienste werden geprueft.</p>
         <p id="auth-mode" class="muted"></p>
+        <p id="delivery-mode" class="muted">Strikter Modus: Antworten werden vor der Wiedergabe geprueft.</p>
         <div id="login" hidden>
           <a id="verification" target="_blank" rel="noopener noreferrer">Microsoft-Anmeldung oeffnen</a>
           <p>Einmalcode: <strong id="device-code"></strong></p>
@@ -31,25 +68,31 @@
           <button id="stop" type="button" disabled>Stoppen</button>
           <button id="delete" type="button" disabled>Sitzung loeschen</button>
         </div>
-        <div class="voice-toolbar">
-          <label><input id="microphone" type="checkbox" disabled> Mikrofon</label>
-          <label><input id="playback" type="checkbox" checked> Sprachausgabe</label>
-          <span id="turn-count">0 / 30 Beitraege</span>
-        </div>
-        <ol id="transcript" aria-label="Gespraech" aria-live="polite"></ol>
+        </details>
         <form id="composer">
-          <label for="message">Ihr Beitrag</label>
-          <textarea id="message" rows="2" maxlength="6000" disabled></textarea>
+          <label for="message">Lieber tippen? Ihr Beitrag</label>
+          <textarea id="message" rows="2" maxlength="6000" placeholder="Was beschaeftigt Sie zu diesem Thema?" disabled></textarea>
           <button id="send" type="submit" disabled>Senden</button>
-          <button id="finish" type="button" disabled>Zusammenfassung erstellen</button>
         </form>
         <p id="session-limit" class="muted"></p>
-        <h2 class="source-heading">Freigegebene Unterlagen</h2>
+        <details id="transcript-panel">
+          <summary>Gespraechsverlauf <span id="transcript-count" class="muted">(0)</span></summary>
+          <ol id="transcript" aria-label="Gespraech" aria-live="polite" tabindex="0"></ol>
+        </details>
+        <details id="sources-panel">
+        <summary>Freigegebene Unterlagen</summary>
         <ul id="sources"><li>Noch keine Quellen geladen.</li></ul>
+        </details>
       </section>
       <section class="summary" aria-labelledby="summary-title">
-        <h2 id="summary-title">Zusammenfassung</h2>
-        <p id="summary-state">Noch kein Entwurf.</p>
+        <p class="eyebrow">Ihr Ergebnis</p>
+        <h2 id="summary-title" tabindex="-1">Zusammenfassung</h2>
+        <p id="summary-state" aria-live="polite">Noch kein Entwurf.</p>
+        <ol class="review-steps" aria-label="Schritte zur Freigabe">
+          <li><strong>Pruefen</strong><span>Passt der Entwurf zu Ihrer Haltung?</span></li>
+          <li><strong>Aenderungen uebernehmen</strong><span>Bearbeitungen zuerst bestaetigen.</span></li>
+          <li><strong>Freigeben &amp; speichern</strong><span>Erst mit Ihrer Freigabe als Word-Dokument in SharePoint.</span></li>
+        </ol>
         <form id="review" hidden>
           <label for="topic">Thema</label>
           <input id="topic" maxlength="6000" required>
@@ -63,7 +106,6 @@
         </form>
         <button id="save" type="button" disabled>Gepruefte Zusammenfassung speichern</button>
         <p><a id="download" hidden target="_blank" rel="noopener noreferrer">Word-Dokument in SharePoint oeffnen</a></p>
-        <img class="briefing-image" src="/static/briefing.png" alt="Deckblatt des synthetischen AlpenMobil-Briefingpacks" width="480" height="280">
       </section>
     </main>
     <footer>Synthetische Demodaten &middot; Lokale Einzelnutzer-Demo &middot; Keine Produktionsfreigabe</footer>

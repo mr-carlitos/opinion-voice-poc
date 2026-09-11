@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "start": "uv run --frozen --no-dev uvicorn app.main:app --host 127.0.0.1 --port 8000 --no-access-log",
-    "lint": "uv run --frozen ruff check . && uv run --frozen ruff format --check . && node --check app/static/app.js && node --check playwright.config.js && node --check tests/e2e/startup.spec.js",
+    "lint": "uv run --frozen ruff check . && uv run --frozen ruff format --check . && node --check app/static/app.js && node --check app/static/avatar.js && node --check playwright.config.js && node --check tests/e2e/startup.spec.js && node --check tests/e2e/avatar.spec.js",
     "test:python": "uv run --frozen pytest --junitxml=artifacts/pytest.xml",
     "test:e2e": "playwright test",
     "test": "npm run lint && npm run test:python && npm run test:e2e"

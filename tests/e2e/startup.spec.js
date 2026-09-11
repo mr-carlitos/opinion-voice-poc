@@ -25,13 +25,19 @@ const test = base.extend({
 
 test('startup stays unavailable without cloud integrations', async ({ page, request }, testInfo) => {
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'Meinungsbildung', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Eine eigene Position.', exact: true })).toBeVisible();
   await expect(page.getByRole('status')).toHaveText('Noch nicht verbunden');
   await expect(page.getByRole('button', { name: 'Sitzung starten' })).toBeDisabled();
-  await expect(page.getByRole('button', { name: 'Zusammenfassung speichern' })).toBeDisabled();
-  const response = await request.post('/api/sessions', { data: {} });
-  expect(response.status()).toBe(503);
-  expect((await response.json()).code).toBe('integrations_not_implemented');
+  await expect(page.getByRole('button', { name: 'Gepruefte Zusammenfassung speichern' })).toBeDisabled();
+  const response = await page.evaluate(async () => {
+    const result = await fetch('/api/sessions', {
+      method: 'POST', headers: { 'X-Local-Client': '1', 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    return { status: result.status, data: await result.json() };
+  });
+  expect(response.status).toBe(503);
+  expect(response.data.detail).toContain('SharePoint-Verbindung erforderlich');
   expect((await request.get('/.env')).status()).toBe(404);
   const fits = await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
   expect(fits, 'No horizontal overflow').toBe(true);

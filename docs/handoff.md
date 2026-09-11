@@ -4,6 +4,105 @@
 
 This section supersedes the historical 9 September notes below.
 
+- Diagnostic e428b451d4b4 identified the operator's actual avatar handshake failure:
+  H264 supported, local offer created, ICE still gathering after30s, offer_sent=false.
+  Browser previously waited exclusively for end-of-candidates. Added bounded3s
+  gathering fallback to send the current offer once; late completion cannot send
+  it twice and Stop clears both timers. Remote negotiation/network media success
+  remains to be verified on the operator browser; this is not a codec failure.
+- September11 avatar diagnostics: failures now produce a shared diagnostic ID
+  in UI/terminal and ignored `.local/diagnostics.jsonl`. Browser preserves failure
+  stage, WebRTC states, codec support, offer/answer flags and safe ICE errors
+  before cleanup; actual exception names/messages are retained with redaction.
+  Azure avatar errors retain safe service message/details and available session/
+  event IDs. Bridge propagation preserves the same diagnostic ID. No raw SDP,
+  ICE credentials, media or arbitrary event dump. Reproduce after server restart
+  and hard refresh, then inspect the JSONL record rather than guessing from
+  browser_connection_failed. The reported user failure has not yet been reproduced
+  with this added instrumentation.
+- September 11 v2 continuation: approved streaming/native-avatar code and
+  redesigned conversation/review UI implemented. Local `.env` explicitly enables
+  streaming and offers avatar selection; checked-in defaults remain strict/
+  avatar-off. The legacy AVATAR_ENABLED flag is not the new capability switch.
+- Summary validation now checks generated and edited drafts before they can be
+  saved. Live regional-model probes accepted a correct30-vehicle fact and a changed
+  subjective preference, rejected300 vehicles. The validator was clarified to
+  recognize the common source appendix without requiring inline citations.
+  These examples reduce uncertainty, not a guarantee of semantic correctness.
+- Avatar live media remains blocked in the Linux test browser: accepted stock
+  configuration/ICE, then SDP video negotiation rejection; installed Chromium
+  lacks H.264. Browser codec guard now explains this. Test in desktop Chrome/Edge
+  with H.264; real avatar frames/audio have NOT yet been verified.
+- Interruption refinement: browser playback now stops as soon as the server sends
+  speech_started, without waiting for transcription. Only when audio is playing
+  does the browser report its item/playback position; stale reports cannot cancel
+  a different new response. Speech onset alone still does not cancel pending
+  generation/evidence checks. This supersedes the earlier no-playback-stop behavior.
+  Actual onset delay still includes VAD/network detection; no zero-latency claim.
+- Noisy-room follow-up: actual Voice Live probe confirmed missing-item errors
+  omit the client event_id. Cleanup correlation now also matches the service's
+  exact missing-item message to an outstanding ID we requested; unrelated errors
+  remain visible. Successful deletion acknowledgments clear outstanding requests.
+- Turn detection now uses azure_semantic_vad_multilingual, threshold0.6,
+  speech_duration200ms, prefix420ms, silence500ms and azure_deep_noise_suppression.
+  Configuration accepted live with existing GPT5.1 prompt agent/API version.
+  A speech_started event alone no longer cancels model output or browser playback;
+  only a transcribed contribution triggers interruption. This deliberately trades
+  instant barge-in for resilience to noise. Browser acoustic echo cancellation is
+  retained; server echo cancellation/filler suppression are not enabled because
+  playback is delayed by our evidence gate. Real noisy-room acceptance still pending.
+- The harmless malformed heading in the ignored reference credential file was
+  changed to a dotenv comment; secret values were unchanged.
+- Follow-up after failed human rehearsal: a delayed browser playback-interrupt
+  report for an old answer could cancel the new response after its user transcript
+  appeared. The bridge now distinguishes the reported playback item from the
+  active response, clears the completed assistant item before starting a queued
+  turn, and avoids duplicate finalization while evidence checking is running.
+  Regression proves the next assistant answer is released after a stale
+  interruption. A separate live synthetic cancellation/delete probe succeeded.
+  The exact remaining cause of the operator's uncorrelated invalid-delete error
+  is not proven; do not label human rehearsal passed until retested.
+- Presentation patch: audio checkboxes replaced with explicit microphone and
+  playback toggle buttons (aria-pressed); microphone access remains opt-in.
+  Spoken "OK, jetzt Zusammenfassung erstellen" and equivalent affirmative
+  phrases are accepted; negative/discussion phrases and save approval remain
+  separate. Cancel cleanup is deduplicated and excludes non-message reasoning
+  items; only invalid-ID errors correlated to our own cleanup request are treated
+  as already-absent items, not blanket-suppressed.
+- Conservative evidence optimization: full corpus and structured checks retained;
+  compact corpus-first request, low verbosity, explicit reasoning none. A small
+  correct/incorrect fact comparison measured3.36/1.52s before and1.67/1.47s after.
+  This does not guarantee overall voice latency. No unchecked streaming or
+  model/region change. Restart the operator-owned server to pick up this patch.
+- **Latest fleet integration result:** full Chromium (not headless shell) passed
+  the entire live journey with a synthetic German WAV fed through browser
+  `getUserMedia`/AudioWorklet: one spoken question, cited fact, typed follow-up
+  retaining context, changed position, summary, versioned form edit/apply, explicit
+  button save, real Word download and same-item retry. All Azure/Graph/model calls
+  were real; the microphone input was synthetic. No human audio hardware claim.
+- Saved Word verification confirmed all three exact headings and the edited
+  synthetic stance. Owned artifact identifiers/timings are in ignored
+  `.local/live-browser-result.json`. The diagnostic app session and its Foundry
+  conversation were deleted; the approved synthetic Word output remains.
+- Measured integration timings: backend startup 6.33s (corpus 4.44s), start through
+  validated greeting 12.6s, synthetic speech/cited answer 12.39s, typed contextual
+  follow-up 5.37s, changed-position response 14.56s, summary 8.41s, approved upload
+  3.62s. These are samples; evidence gating still produces noticeable latency.
+- Scoped HTTP reuse and immediate use of freshly fetched download URLs reduced a
+  separate same-corpus load from16.27s to4.84s. No cross-session source cache:
+  version/ID rechecks, source scope, and download bounds remain enforced.
+- Voice cancellation can now run while evidence checking is in flight. Cancelled,
+  unsupported and unheard output is removed; accepted/queued turns are counted
+  once. Review/save now captures the presented version and freezes bytes for safe
+  failure/retry. HTTP recovery returns the authoritative review snapshot; stale
+  edits/approvals are rejected. Browser drops stale audio and stops it on close.
+- Reconnecting the same session's voice channel is explicitly rejected to avoid
+  replaying the greeting/context. Review/save remains available over HTTP after
+  disconnect. Delete the session and start another conversation when reconnecting.
+- Current server: loopback port8010, attached process for this session. No new
+  commits were made after checkpoint72cfc42; review the new fleet changes before
+  committing. Remaining manual work: actual microphone/speaker rehearsal, live
+  interruption/failure paths, and conversational latency.
 - **Latest model migration, 10 September:** user selected GPT-5.1 Regional/Standard
   in Sweden Central over newer GPT-5.x EU Data Zone alternatives. Deployment
   `gpt-5.1`, version `2025-11-13`, Standard capacity 100 is succeeded and selected
@@ -141,7 +240,8 @@ push the baseline beyond this range. Skip the avatar if it risks the deadline.
 - Deadline over budget optimization; no further numeric-budget question needed.
 - GitHub Actions disabled. No mandatory TDD, full test suite or remote CI wait.
   Existing local tests/Playwright are optional debugging aids.
-- Avatar is optional, disabled and not implemented. Keep an audio-only fallback.
+- Avatar is optional and disabled by default. The native v2 transport is now
+  implemented locally; see the dated update below for the live-service blocker.
 
 The controlling decisions are also in [plan.md](../plan.md).
 
@@ -288,3 +388,24 @@ agent type, use local files as runtime grounding, or call mocks end-to-end succe
   Do not restart remote-run monitoring. Local tests remain available on demand.
 - This handoff adds documentation only. It does not change the application,
   deploy resources, stop local servers or remove artifacts.
+
+## Native v2 implementation update — 11 September 2026
+
+This update supersedes earlier statements that avatar transport is unimplemented.
+Local capability/session opt-in, bounded ICE/base64-SDP forwarding, vanilla
+WebRTC media, greeting gate, no duplicate PCM, interruption/clear, timeout,
+fallback and cleanup are implemented. `strict`/audio-only remains the default;
+`streaming` explicitly forgoes independent conversational pre-speech checking.
+Generated and edited summaries retain semantic checks and version-bound save.
+The single prompt agent and GPT-5.1 Standard Sweden Central deployment are unchanged.
+
+Native **live acceptance is blocked**: the existing resource returned ICE, then
+`avatar_service_internal_error` before an SDP answer; no avatar frames or greeting.
+No root cause is proven by that code. Audio-only streaming on the same resource
+did produce a complete greeting, first received PCM at 1.953 seconds after
+connection. Synthetic probing did not upload documents, change Azure resources,
+change grants, record media, or log transient signaling credentials.
+
+Preserve all uncommitted work. No implementation commit/push was requested in
+this task. Use `docs/setup.md` and `docs/testing.md` for configuration, contracts,
+tests and the explicit outstanding real-avatar/human-rehearsal boundary.

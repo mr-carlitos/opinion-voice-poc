@@ -1,5 +1,6 @@
 import logging
 import secrets
+import time
 from urllib.parse import urlsplit
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
@@ -9,6 +10,7 @@ from pydantic import BaseModel, ConfigDict
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.config import ROOT, Settings
+from app.diagnostics import record_diagnostic
 from app.export import OpinionSummary
 from app.foundry import Foundry
 from app.graph import Graph, GraphAuth, ServiceError, ensure_separate_folders
@@ -22,6 +24,7 @@ browser_key = secrets.token_urlsafe(32)
 auth = GraphAuth(settings) if not settings.graph_issues() else None
 foundry = Foundry(settings) if settings.project_endpoint and settings.tenant_id else None
 sessions: dict[str, Session] = {}
+voice_sessions: set[str] = set()
 logger = logging.getLogger(__name__)
 app = FastAPI(title="Opinion Voice PoC", docs_url=None, redoc_url=None, openapi_url=None)
 app.add_middleware(
@@ -97,6 +100,10 @@ def readiness() -> JSONResponse:
             else "Konfiguriert. Dienste werden beim Sitzungsstart geprueft.",
             "can_sign_in": auth is not None,
             "auth": state,
+            "voice_delivery_mode": settings.voice_delivery_mode,
+            "avatar_available": settings.avatar_enabled
+            and settings.voice_delivery_mode == "streaming",
+            "speech_independently_verified": settings.voice_delivery_mode == "strict",
         },
     )
 
@@ -108,40 +115,70 @@ def sign_in():
     return auth.start()
 
 
+class SaveRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    version: int
+
+
+@app.get("/api/sessions/{session_id}/draft")
+def draft_state(session_id: str):
+    return get_session(session_id).snapshot()
+
+
 @app.post("/api/sessions/{session_id}/editing")
-def mark_editing(session_id: str):
+def mark_editing(session_id: str, body: SaveRequest):
     session = get_session(session_id)
-    with session.lock:
-        if session.document is not None:
-            raise HTTPException(409, "Der freigegebene Entwurf ist bereits eingefroren.")
-        session.draft_editing = True
-    return {"editing": True}
+    return session.mark_editing(body.version)
+
+
+class AvatarRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    avatar_enabled: bool = False
 
 
 @app.post("/api/sessions")
-def create_session():
+def create_session(body: AvatarRequest | None = None):
     if settings.issues() or not auth or not auth.owner or not foundry:
         raise HTTPException(503, "Konfiguration und SharePoint-Verbindung erforderlich.")
     if len(sessions) >= 3:
         raise HTTPException(
             409, "Bitte eine vorhandene Sitzung loeschen; maximal drei lokale Sitzungen."
         )
-    graph = Graph(auth)
-    source = graph.resolve_folder(
-        settings.input_url, drive_id=settings.input_drive_id, item_id=settings.input_folder_id
-    )
-    output = graph.resolve_folder(
-        settings.output_url, drive_id=settings.output_drive_id, item_id=settings.output_folder_id
-    )
-    ensure_separate_folders(source, output)
-    corpus = load_corpus(graph, source)
+    started = time.monotonic()
+    avatar = bool(body and body.avatar_enabled)
+    if avatar and (not settings.avatar_enabled or settings.voice_delivery_mode != "streaming"):
+        raise HTTPException(400, "Avatar erfordert aktivierten Streaming-Modus.")
+    with Graph(auth) as graph:
+        source = graph.resolve_folder(
+            settings.input_url, drive_id=settings.input_drive_id, item_id=settings.input_folder_id
+        )
+        output = graph.resolve_folder(
+            settings.output_url,
+            drive_id=settings.output_drive_id,
+            item_id=settings.output_folder_id,
+        )
+        ensure_separate_folders(source, output)
+        folders_done = time.monotonic()
+        corpus = load_corpus(graph, source)
+    corpus_done = time.monotonic()
     foundry.configure_agent()
+    agent_done = time.monotonic()
     session = Session(auth.owner, foundry.create_conversation(corpus), corpus, output)
+    session.avatar_enabled = avatar
+    timings = {
+        "folders": round(folders_done - started, 2),
+        "corpus": round(corpus_done - folders_done, 2),
+        "agent": round(agent_done - corpus_done, 2),
+        "conversation": round(time.monotonic() - agent_done, 2),
+        "total": round(time.monotonic() - started, 2),
+    }
+    logger.info("Session startup seconds: %s", timings)
     sessions[session.session_id] = session
     return {
         "session_id": session.session_id,
         "sources": [source.model_dump(mode="json") for source in corpus.sources.values()],
         "versions": corpus.versions,
+        "startup_seconds": timings,
         "limits": "30 Minuten / 30 Beitraege. Quellenstand vom Sitzungsstart.",
     }
 
@@ -156,27 +193,29 @@ def get_session(session_id: str) -> Session:
 class DraftEdit(BaseModel):
     model_config = ConfigDict(extra="forbid")
     summary: OpinionSummary
-
-
-class SaveRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
     version: int
 
 
 @app.post("/api/sessions/{session_id}/draft")
 def edit_draft(session_id: str, body: DraftEdit):
     session = get_session(session_id)
-    if session.phase != "review":
-        raise HTTPException(409, "Kein Entwurf in Pruefung.")
+    state = session.snapshot()
+    if state["phase"] != "review" or state["frozen"] or state["version"] != body.version:
+        raise HTTPException(409, "Der Entwurf wurde geaendert oder ist bereits eingefroren.")
     Foundry.check_sources(body.summary.sources, session.corpus)
-    session.set_draft(body.summary)
-    return {"version": session.draft_version, "summary": session.draft.model_dump(mode="json")}
+    if not foundry:
+        raise HTTPException(503, "Zusammenfassungspruefung ist nicht konfiguriert.")
+    foundry.validate_summary(
+        body.summary, session.corpus, list(session.user_turns), user_edited=True
+    )
+    return session.set_draft(body.summary, expected_version=body.version, validation_passed=True)
 
 
 @app.post("/api/sessions/{session_id}/save")
 def save(session_id: str, body: SaveRequest):
     session = get_session(session_id)
-    return session.save(Graph(auth), body.version)
+    with Graph(auth) as graph:
+        return session.save(graph, body.version)
 
 
 @app.delete("/api/sessions/{session_id}")
@@ -186,6 +225,7 @@ def delete_session(session_id: str):
         raise HTTPException(409, "Bitte zuerst die Verbindung stoppen.")
     foundry.delete_conversation(session.conversation_id)
     del sessions[session_id]
+    voice_sessions.discard(session_id)
     return {"deleted": True, "message": "Gespeicherte SharePoint-Dateien bleiben erhalten."}
 
 
@@ -197,23 +237,28 @@ async def voice(socket: WebSocket, session_id: str):
         await socket.close(code=1008)
         return
     session = get_session(session_id)
-    if session.voice_connected:
+    if session.voice_connected or session_id in voice_sessions:
         await socket.close(code=1008)
         return
-    await socket.accept()
     session.voice_connected = True
     try:
+        await socket.accept()
+        voice_sessions.add(session_id)
         await bridge(socket, session, settings, foundry, Graph(auth))
     except WebSocketDisconnect:
         pass
     except Exception as error:
-        logger.error("Voice bridge failed: %s", type(error).__name__)
+        diagnostic_id = getattr(error, "diagnostic_id", None)
+        if not diagnostic_id:
+            diagnostic_id = record_diagnostic("voice_bridge_failure", error=error)
         try:
             await socket.send_json(
                 {
                     "type": "error",
+                    "diagnostic_id": diagnostic_id,
                     "message": f"Sprachverbindung fehlgeschlagen ({type(error).__name__}). "
-                    "Endpunkt, Rollen und Modell pruefen.",
+                    f"Diagnose-ID: {diagnostic_id}. "
+                    "Details im Terminal und .local/diagnostics.jsonl.",
                 }
             )
         except Exception:

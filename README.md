@@ -7,8 +7,9 @@ Word summaries uploaded directly through Graph. See [plan.md](plan.md).
 
 ## Current Status
 
-The local implementation is substantially in place, but **the cloud voicebot
-has not been verified end to end**. See the [handoff and next steps](docs/handoff.md)
+**The complete journey passed with synthetic microphone input in full Chromium
+against real Azure and SharePoint services.** A human microphone/speaker rehearsal
+and conversational-latency assessment remain outstanding. See the [handoff](docs/handoff.md)
 for the current checkpoint on **10 September 2026** and the [setup guide](docs/setup.md).
 
 - Implemented in code: configuration, delegated/application Graph authentication,
@@ -39,8 +40,20 @@ for the current checkpoint on **10 September 2026** and the [setup guide](docs/s
   not tested by that probe. First upstream audio was 1.29 seconds; evidence checking
   added 16.4 seconds. The app buffers audio for evidence checking, so this is
   not evidence of 1.29-second user-perceived response time.
-- Still pending: the complete live speech/text, reviewed-summary journey and rehearsal.
-  Avatar remains disabled and unimplemented.
+- Integrated live journey: synthetic German microphone question, cited answer,
+  typed follow-up retaining context, changed position, structured summary, form
+  edit/apply, explicit save, actual Word download and same-item retry all passed.
+  The saved document preserved the three exact headings and edited stance.
+- Startup improved: the six-PDF load fell from 16.27s to 4.84s in a direct
+  comparison; a complete browser session started in 6.33s. No corpus cache was added.
+- Still pending: real human microphone/speaker rehearsal, live interruption and
+  failure-path rehearsal, and lower/less variable response latency. Measured
+  validated turns took about 5-15 seconds, not a natural-conversation sign-off.
+  Native stock-avatar transport is implemented but disabled by default; the
+  real handshake on 11 September 2026 failed with `avatar_service_internal_error`
+  after ICE configuration, before an SDP answer or video frames.
+  Audio-only streaming fallback returned a greeting (first received PCM 1.953s
+  after connection; not a physical audio-latency measurement).
 - Liveness is not cloud readiness. No canned conversation or mocked upload is
   presented as live success. Existing local tests remain optional debugging tools.
 
@@ -59,7 +72,7 @@ uv run --frozen --no-dev uvicorn app.main:app --host 127.0.0.1 --port 8000 --no-
 Open http://127.0.0.1:8000. The supported start command binds to loopback only.
 Do not expose this development server remotely. Host validation is an additional
 check, not a replacement for authentication. Cloud adapters are implemented but
-the complete voice journey remains unverified. This remains a localhost, single-user,
+the synthetic-input journey is verified, not human audio hardware. This remains a localhost, single-user,
 synthetic-data demo; remote access and real customer data are not approved.
 
 With Node.js installed, `npm start` is a shortcut for the same server command;
@@ -147,9 +160,9 @@ explicit `--apply --narrow-permissions` legacy migration, and operator review
 before ordinary device consent. Setup never grants consent or directory roles;
 admin consent or tenant-policy changes are not the default remedy for a denial.
 
-Next checkpoint: a cited answer by voice through the prompt agent, a typed
-follow-up, then review/approval and save of that conversation's actual summary.
-The independent PDF and synthetic Word checks passed; they do not replace the
-combined voice journey. Test safe retry and report permission
-limitations. Azure/Graph checks remain explicitly opted-in and local;
+Next checkpoint: rehearse with the operator's actual microphone and speakers,
+interrupt an answer, exercise an unsupported question and inspect perceived latency.
+The synthetic-input combined journey and actual reviewed Word save passed;
+they do not establish physical audio quality or universal model behavior.
+Azure/Graph checks remain explicitly opted-in and local;
 `--upload-corpus` and `--save-example` write approved synthetic artifacts.

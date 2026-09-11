@@ -153,7 +153,9 @@ def main():
         report["evidence_seconds"] = round(time.monotonic() - started, 2)
         report["evidence_passed"] = True
         started = time.monotonic()
-        summary = foundry.summary(conversation_id, corpus)
+        summary = foundry.summary(
+            conversation_id, corpus, user_turns=["Wie viele Fahrzeuge umfasst der Pilot?"]
+        )
         report["summary_seconds"] = round(time.monotonic() - started, 2)
         report["summary_schema_passed"] = True
         report["summary_source_count"] = len(summary.sources)

@@ -8,6 +8,29 @@ use existing focused checks only when helpful. No CI wait or full suite is requi
 
 ## Evidence checkpoint — 10 September 2026
 
+September11 diagnostic additions: synthetic tests verify browser failure stages,
+ICE errors/state captured before peer cleanup, retained DOMException messages,
+service detail propagation, shared diagnostic IDs, redaction/field allowlists,
+bounded records and log rotation/private permissions. These tests do not identify
+the cause of the operator's latest `browser_connection_failed`; a new reproduction
+with the instrumentation is required. See setup.md for the log location.
+
+**Integrated live result:** full Chromium with a synthetic German WAV microphone
+passed the actual browser capture/worklet, Voice Live, GPT-5.1, SharePoint corpus
+and reviewed Word-save journey. Typed follow-up retained spoken context; a changed
+position appeared in the draft; version2 form edits were saved; the real downloaded
+Word file retained the exact headings and edited stance. Repeat save returned the
+same item. Session/conversation cleanup passed and no browser script errors occurred.
+
+The ordinary headless-shell browser rejected `getUserMedia` with NotSupportedError;
+the full installed Chromium (`channel: 'chromium'`) supported the synthetic audio
+fixture. This was a test-environment issue, not evidence that a human microphone
+works. No physical speaker audibility or actual microphone quality is claimed.
+
+Backend startup was6.33s; validated conversational turns varied from5.37s to14.56s;
+summary8.41s and reviewed upload3.62s. Full evidence checking remains required.
+Human hardware, live barge-in/failure rehearsal and latency are still outstanding.
+
 The latest model is **GPT-5.1 `2025-11-13`, Standard capacity 100 in Sweden Central**;
 the former GlobalStandard GPT-4.1-mini deployment has been deleted. These model
 facts supersede older entries in the table. Runtime summary/evidence calls use the
@@ -31,11 +54,22 @@ result, not a natural-conversation performance sign-off.
 | Live file access | Six manifest PDFs uploaded/read back, 12 pages and `30 Fahrzeuge` verified. Synthetic Word upload/download verified authored package content; retry reused the same item. |
 | Word storage metadata | SharePoint changed the ZIP package by adding property/custom XML metadata. Original Word payload parts remain identical; allowlisted metadata comparison replaces invalid raw-byte assumptions. Unexpected parts/content or changed relationships fail closed. |
 | Browser/backend | Application-mode label and connection worked without a device code. A real six-source session was created and cleaned up. First attempt hit a Graph transport timeout; successful retry was slow, so startup latency/reliability remains a concern. |
-| Live conversation | The combined microphone/voice/text, reviewed-summary journey remains **UNVERIFIED**. |
+| Live conversation | Combined synthetic microphone/voice/text, reviewed-summary upload/download and repeat save passed. Human microphone/speaker rehearsal remains outstanding. |
 
 Successful provisioning, a valid token, or successful consent alone does not
 prove application readiness. Add observed results only after the actual operation
 passes; do not upgrade historical foundation checks into current live evidence.
+
+Startup follow-up: scoped connection reuse and immediate use of fresh download
+URLs reduced a real six-PDF load from 16.27s to 4.84s (single comparison), with
+19 versus 13 metadata requests including input-folder resolution. No cross-session
+corpus cache was introduced. Post-download ID/version checks, scoped parent/drive
+validation and streamed size limits remain enforced. Synthetic regression cases
+also verify that bearer tokens are not sent to preauthenticated file URLs.
+
+Local startup tests explicitly clear cloud configuration, even when ignored
+`.env` is present. Both desktop/mobile startup and retry cases passed. They do not
+authenticate against cloud services or claim live voice behavior.
 
 `--resolve-folders` now reports each folder separately, retains safe Graph error
 codes/request IDs, and exits nonzero without a traceback for expected service
@@ -55,8 +89,8 @@ boundaries; they do not establish real SharePoint access.
 3. Validation: invented source IDs and model-supplied destination/owner are rejected.
 4. Browser recovery: a failed readiness request is visible and retry recovers without
    enabling an unavailable voice session. Capture console errors and failed requests.
-5. Live acceptance (**implemented path, UNVERIFIED**): review the narrow
-   registration and intended operations, complete ordinary device sign-in, read
+5. Live acceptance (**synthetic input passed; human rehearsal pending**): review the
+   selected identity and intended operations, connect that identity, read
    one approved PDF through Graph, verify a synthetic DOCX upload/download, then
    ask by speech, follow up by text, review and approve, upload/download the reviewed
    summary and retry without duplication. Clean up only test-owned artifacts.
@@ -134,12 +168,13 @@ Do not wait on remote CI runs or create authentication work solely for CI.
 
 ## Current Gaps
 
-Application-mode Graph PDF access and independent synthetic Word upload/retry
-are verified live. Voice continuity and the actual conversation's review/approval
-workflow remain unverified. The delegated file-access route still returned 403.
-Avatar remains disabled and unimplemented. Do not add a passing placeholder for
-cloud tests; use the existing, separately opted-in local diagnostics and manual
-journey rather than building a new harness.
+Application-mode Graph PDF access, synthetic microphone/typed continuity and
+the actual conversation's review/approval/upload/download/retry were verified live.
+Human audio hardware and live interruption/failure-path rehearsal remain unverified.
+The delegated file-access route still returned403.
+Avatar transport is implemented and disabled by default. Deterministic signaling
+and browser lifecycle tests are not evidence that native media works in Azure.
+Do not label those tests as passing cloud avatar acceptance.
 
 `Files.ReadWrite` is not a two-folder token security boundary. Prefer a dedicated
 non-admin synthetic test identity; application restrictions do not narrow all
@@ -152,5 +187,111 @@ The approved Graph snapshot route remains **C2 incomplete**. Permission revocati
 is not rechecked mid-session; a new session is required to refresh source content.
 Reviewer management and multi-user privacy, including A15/A17, are deferred and
 unverified. Prompt-based behavior in `agent/instructions.md` and evidence checks
-do not guarantee grounding or production privacy. The full live journey remains
-**UNVERIFIED** until exercised with actual services and approved synthetic data.
+do not guarantee grounding or production privacy. The full synthetic-input journey
+passed actual services; do not upgrade that to human audio-quality or production
+acceptance.
+
+## Native avatar v2 checks — 11 September 2026
+
+Local validation: **152 Python tests and 34 desktop/mobile browser tests passed**.
+Scoped Python lint/format and JavaScript syntax checks passed, as did
+`git diff --check`. Repository-wide `npm run lint` encountered unrelated pending
+format/import issues in `scripts/generate_sample_pdfs.py`,
+`tests/test_foundry.py`, `tests/test_spoken_commands.py` and
+`tests/test_streaming_mode.py`; those other worktree changes were preserved.
+
+- `tests/test_avatar.py`: strict/default boundary, opt-in capability, ICE/SDP
+  bounds and allowlisting, offer/answer lifecycle, greeting gate, no duplicate
+  PCM, interrupt/clear, Stop, upstream/browser failures and server timeout.
+- `tests/e2e/avatar.spec.js`: deterministic receive-only peer setup, delayed media
+  readiness, one offer/readiness message, interrupt/playback mute, malformed
+  answer, timeout, track/peer/media-element release (desktop and mobile Chromium).
+- Voice, streaming, Foundry summary, session-version and HTTP edited-draft
+  regressions run alongside these. The bridge passes a copied `user_turns` list
+  to semantic summary validation and marks only a successful draft as validated.
+  Mock validation failures reject edits and block saving; they are not live-model
+  quality evidence.
+- Real synthetic browser probe, existing resource: two bounded attempts received
+  ICE; the diagnosed attempt returned `avatar_service_internal_error` before
+  `session.avatar.connecting`, zero video width, zero decoded frames and no
+  greeting. No complete avatar handshake or synchronized audio/video is claimed.
+- Real explicit audio-only fallback: connected, 36 PCM chunks, one completed
+  greeting, first received audio 1953ms after connection, avatar unchecked/hidden.
+  This is not end-of-user-speech or first-audible timing. The owned test
+  conversation was deleted after Stop; no document upload was performed.
+
+No live service tokens, SDP, ICE credentials, screenshots or recordings were
+captured. Test servers were local and no provisioning/grants/model change was
+performed. Physical audio, real avatar frames, network recovery and a complete
+avatar-to-Word rehearsal remain pending.
+
+### Bounded avatar rejection follow-up — 11 September 2026
+
+**Live acceptance remains blocked: no SDP answer, no video frames, no audible
+avatar output.** Exactly two further live connections were opened; no retries
+remain within this diagnostic budget. Neither model nor regional deployment,
+authentication, grants or resources were changed.
+
+- Resource Health reported `Available`, with no known Azure platform problem.
+  The existing account is `ai-opinion-3ks5lhyvoieoi`, SwedenCentral; project and
+  agent are `opinion-voice`, existing agent version `3`, model `gpt-5.1`, unchanged
+  API version `2026-04-10`.
+- Current application avatar request is already the minimal stock configuration:
+  `character=lisa`, `style=casual-sitting`, `customized=false`. It does not specify
+  an avatar type, resolution, bitrate, crop or other optional video settings.
+  Both diagnostic connections requested that same avatar, modalities
+  `["text","audio"]`, voice `azure-standard/de-DE-KatjaNeural`, and
+  `turn_detection=null`; optional transcription/noise/VAD customization was omitted.
+- Attempt 1: 16:33:35 UTC. The diagnostic reader failed on the initial
+  `session.created` event's null avatar before collecting acceptance or error
+  evidence. This was a diagnostic bug, not evidence of a cloud rejection. Its
+  websocket closed; the owned empty conversation was identified by its exact
+  creation time (16:33:34 UTC) and deleted. No offer or media was recorded.
+- Attempt 2: 16:34:21–16:34:22 UTC. `session.updated` accepted
+  `modalities=["audio","text","avatar"]`, the requested German voice, PCM16 input
+  and output, disabled turn detection, and
+  `avatar={type:"video-avatar",character:"lisa",style:"casual-sitting",
+  customized:false,video:null,scene:null,model:null,image_prompt_url:null,
+  output_protocol:"webrtc",output_audit_audio:false}`.
+  Thus resolution was **not explicitly negotiated** (`video:null`), rather than
+  an invalid requested resolution. The documented stock default is 1920×1080.
+  Service ICE arrived; the browser gathered candidates and sent a receive-only
+  audio/video offer at 16:34:22.151 UTC. At 16:34:22.542 UTC the service returned:
+  - type: `server_error`
+  - code: `avatar_service_internal_error`
+  - message: `Avatar connection failed: WebRTC SDP negotiation failed: peer connect created failure: Failed to set remote video description send parameters`
+  - param: null; error.event_id: null; no inner error/details/request ID supplied
+  - server event ID: `event_6L51e2WhtOegPOq6ZDcMGi`
+  - session ID: `sess_bAAfGn8rv04wsskVOIlUn`
+  - client update/connect event IDs: `minimal-avatar-20260911-1` /
+    `minimal-avatar-connect-20260911-1` (the diagnostic reused these labels).
+  No HTTP request ID was captured. The websocket/browser were closed and this
+  owned diagnostic conversation was deleted immediately.
+
+**Concrete compatibility finding:** a subsequent offline capability check of the
+installed Playwright Chromium found VP8, VP9 and AV1, but **no H.264** video
+receiver codec. Microsoft documents H.264 as the real-time avatar codec. This
+offers a concrete explanation for the remote video-description rejection; it
+does not prove that a supported browser will pass the remaining service/media
+handshake. No third live attempt was made. The player now checks H.264 support
+before constructing/sending an incompatible offer and displays an explicit
+browser-compatibility message. Ten scoped desktop/mobile avatar browser tests
+passed, including codec rejection; JavaScript syntax and `git diff --check`
+passed. These are local checks, not live media evidence.
+
+Official primary references checked for this follow-up:
+- Microsoft Learn `speech-service/voice-live-how-to`: stock `lisa` /
+  `casual-sitting`, optional video settings, service-provided ICE flow.
+- Microsoft Learn `speech-service/regions`: SwedenCentral supports real-time
+  avatar.
+- Microsoft Learn `speech-service/text-to-speech-avatar/what-is-text-to-speech-avatar`:
+  default video resolution and H.264 real-time output.
+
+Next action: explicitly authorize a new bounded live check using a browser whose
+WebRTC receiver capabilities include H.264 (not this codec-limited test Chromium).
+Verify increasing inbound `framesDecoded` and native audio with no PCM playback
+path before claiming success. If the same rejection persists with H.264, open
+Azure support for this existing SwedenCentral resource with the UTC time,
+session/event IDs and accepted settings above; ask for the backend SDP
+negotiation failure details. Do not send tokens, full SDP or ICE credentials.
+No screenshots, recordings, secrets or media payloads were retained.
