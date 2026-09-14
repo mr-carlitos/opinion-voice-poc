@@ -87,7 +87,9 @@ def test_only_explicit_streaming_releases_audio_before_response_done(monkeypatch
                 }
             )
             await until(lambda: any(x["type"] == "assistant" for x in browser.sent))
-            assert len(checks) == (1 if mode == "strict" else 0)
+            if mode == "streaming":
+                await until(lambda: any(x["type"] == "assistant_sources" for x in browser.sent))
+            assert len(checks) == 1
             assert sum(x["type"] == "audio" for x in browser.sent) == 1
             completed = next(x for x in browser.sent if x["type"] == "assistant")
             assert completed["evidence_status"] == (

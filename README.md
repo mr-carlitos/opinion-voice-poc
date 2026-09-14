@@ -1,168 +1,295 @@
 # Opinion Voice PoC
 
-White-label German voice/text thinking partner for an executive discussing
-approved fictional railway documents. The intended runtime uses one Foundry
-prompt agent, Voice Live, configurable Graph access to SharePoint, and reviewed
-Word summaries uploaded directly through Graph. See [plan.md](plan.md).
+A German-speaking voice/text thinking partner for discussing approved fictional
+railway documents and saving a reviewed opinion summary to SharePoint.
 
-## Current Status
+**Scope:** presenter-led, localhost, single-user, synthetic-data demonstration.
+Not a production service or a claim of per-user SharePoint permission trimming.
 
-**The complete journey passed with synthetic microphone input in full Chromium
-against real Azure and SharePoint services.** A human microphone/speaker rehearsal
-and conversational-latency assessment remain outstanding. See the [handoff](docs/handoff.md)
-for the current checkpoint on **10 September 2026** and the [setup guide](docs/setup.md).
+## Current state — 14 September 2026
 
-- Implemented in code: configuration, delegated/application Graph authentication,
-  bounded SharePoint PDF snapshots, Foundry prompt-agent/conversation integration,
-  Voice Live bridge, browser controls, summary review, Word rendering/upload,
-  synthetic PDFs, diagnostic commands and Bicep infrastructure.
-- Locally checked: dependency imports, configuration, PDF extraction, schema/state
-  probes, browser-script syntax, desktop/mobile rendering and Bicep compilation.
-- Provisioned: Azure sign-in is restored; the minimal Sweden Central
-  `rg-opinion-voice-poc` Foundry account/project now uses **GPT-5.1 `2025-11-13`,
-  Standard (capacity 100)**. The former GPT-4.1-mini GlobalStandard deployment
-  was retired on 10 September after successful replacement checks. No Azure app
-  hosting, database or search service was provisioned. This is infrastructure
-  success, not proof of application readiness.
-- Microsoft 365: the operator approved application mode using an existing
-  `Sites.Selected` application identity. Six synthetic PDFs were uploaded and read
-  back (12 pages), including `30 Fahrzeuge`. A synthetic Word file was uploaded,
-  downloaded and verified; a repeated save reused the same remote item.
-- Word integrity: SharePoint added document-package metadata. Verification checks
-  the authored Word parts and permitted metadata changes, not raw ZIP byte
-  equality. The source/stored hashes are recorded in ignored local state.
-- Delegated mode remains available with `User.Read` + `Files.ReadWrite`, but its
-  sharing-link and direct-ID folder requests returned 403 in this tenant.
-  Application mode is explicitly labelled; it is not per-user permission trimming.
-- Regional-model live check: prompt agent version 2 used GPT-5.1, Voice Live
-  generated German audio with the correct SharePoint fact, and structured evidence
-  checking/summary generation succeeded. Microphone input/browser playback were
-  not tested by that probe. First upstream audio was 1.29 seconds; evidence checking
-  added 16.4 seconds. The app buffers audio for evidence checking, so this is
-  not evidence of 1.29-second user-perceived response time.
-- Integrated live journey: synthetic German microphone question, cited answer,
-  typed follow-up retaining context, changed position, structured summary, form
-  edit/apply, explicit save, actual Word download and same-item retry all passed.
-  The saved document preserved the three exact headings and edited stance.
-- Startup improved: the six-PDF load fell from 16.27s to 4.84s in a direct
-  comparison; a complete browser session started in 6.33s. No corpus cache was added.
-- Still pending: real human microphone/speaker rehearsal, live interruption and
-  failure-path rehearsal, and lower/less variable response latency. Measured
-  validated turns took about 5-15 seconds, not a natural-conversation sign-off.
-  Native stock-avatar transport is implemented but disabled by default; the
-  real handshake on 11 September 2026 failed with `avatar_service_internal_error`
-  after ICE configuration, before an SDP answer or video frames.
-  Audio-only streaming fallback returned a greeting (first received PCM 1.953s
-  after connection; not a physical audio-latency measurement).
-- Liveness is not cloud readiness. No canned conversation or mocked upload is
-  presented as live success. Existing local tests remain optional debugging tools.
+- Streaming conversation with a native Foundry Voice Live avatar and audio-only
+  fallback. The operator reports successful avatar use after the ICE-handshake fix.
+- Unified avatar/chat layout, attached text input, accessible microphone icons,
+  interruption controls and a separate review area.
+- One Foundry prompt agent backed by **GPT-5.1 `2025-11-13`, Standard in Sweden
+  Central**. The previous Global Standard deployment was removed.
+- Current local presentation: stock **Harry / casual**, with the German male
+  **Florian HD** voice. Voice Live accepted this combination; HD audio generation
+  was exercised live. Subjective voice quality remains a rehearsal decision.
+- Six approved SharePoint PDFs are read at session start. Real PDF retrieval,
+  reviewed Word upload/download and duplicate-free save retries have passed.
+- Natural summary requests, including longer affirmative German phrases, trigger
+  the same validated review workflow as the button—not an automatic save.
+- Conversational speech is instructed to omit technical citation markers.
+  Streaming sources are checked separately **after** the answer and attached to
+  the correct transcript entry. A live factual-answer probe produced audio
+  without markers and subsequently recovered valid source references.
 
-## Local Setup
+Earlier complete real-service checks used a synthetic browser microphone. They
+do not establish universal human audio quality, noisy-room performance, model
+correctness or a latency SLA. See [test evidence](docs/testing.md) and the
+[handoff](docs/handoff.md) for observed results and remaining limitations.
 
-Requirements: Python 3.12 and [uv](https://docs.astral.sh/uv/).
-Node.js, browser installation, test execution, and Docker are not required to
-start the local server. Azure and the configured Microsoft 365 identity are
-required for the implemented live integrations, not for startup/liveness alone.
+## Technical architecture
+
+```mermaid
+flowchart TB
+    Browser["Browser: avatar, microphone, chat, review"]
+    Backend["Local FastAPI: session state, approval, signaling"]
+    Voice["Azure Voice Live: speech recognition, semantic VAD, TTS, avatar"]
+    Agent["Foundry Agent Service: versioned prompt agent + conversation"]
+    Model["GPT-5.1 Standard deployment · Sweden Central"]
+    Input["SharePoint Inputs: approved synthetic PDFs"]
+    Checks["Backend model calls: evidence and summary validation"]
+    Word["python-docx: frozen approved summary"]
+    Output["SharePoint Outputs: Word documents"]
+
+    Browser <-->|"HTTP + WebSocket: controls, input audio, text"| Backend
+    Backend <-->|"Authenticated Voice Live WebSocket"| Voice
+    Voice <-->|"Agent name/version + conversation ID"| Agent
+    Agent <-->|"Instructions, context, inference"| Model
+    Input -->|"Graph: bounded snapshot at session start"| Backend
+    Backend -->|"Document text + source references"| Agent
+    Voice -->|"Avatar audio/video via WebRTC"| Browser
+    Backend -->|"Audio-only PCM, if avatar is off"| Browser
+    Backend --> Checks
+    Checks <-->|"Same regional model deployment"| Model
+    Checks -->|"Source results / validated review draft"| Browser
+    Browser -->|"Explicit approval of a draft version"| Backend
+    Backend --> Word
+    Word -->|"Graph upload + integrity verification"| Output
+```
+
+### Voice Live, the agent and the model
+
+These are complementary components—not three independent conversational models:
+
+1. **FastAPI prepares the conversation.** Graph reads only manifest-listed PDFs
+   from the configured input folder. Extracted page text, source references and
+   versions form a bounded session snapshot. There is no per-turn SharePoint
+   search, vector database or repository-file fallback.
+2. **The Foundry prompt agent defines behavior.** Its versioned instructions
+   reference the deployed model. The backend connects Voice Live using the
+   project, agent name/version and the existing conversation ID.
+3. **GPT-5.1 generates the answer.** Spoken and typed inputs share that conversation.
+   Voice Live provides transcription, multilingual semantic VAD, noise reduction,
+   speech synthesis and optional avatar output.
+4. **The browser receives media.** Avatar sessions negotiate WebRTC through the
+   backend and receive native audio/video directly. Audio-only sessions receive
+   PCM over the application WebSocket. Only one playback path is active.
+
+The browser sends an SDP offer after ICE gathering completes or a bounded
+three-second wait. Offers are sent once; negotiation errors are explicit and
+provide an audio-only restart option. Signaling is validated and bounded rather
+than forwarding arbitrary browser events to Azure.
+
+### Streaming versus strict mode
+
+| Mode | Speech delivery | Sources and assurance |
+|---|---|---|
+| `streaming` | Audio/avatar starts as output arrives. | No independent pre-speech validation. A separate post-response check supplies source references or a visible unsupported/incomplete status. |
+| `strict` | Audio-only response is buffered until the evidence check passes. | Independent pre-playback checking, with additional latency. Native avatar is not enabled in this mode. |
+
+**Strict remains the code/template default.** Streaming is an explicit, visible
+demo tradeoff. Post-response attribution cannot retract an unsupported statement
+already heard. It has at most two in-flight checks; excess or failed checks are
+marked incomplete. It incurs model usage but does not block the audio path.
+
+Document IDs and URLs are added by the application as clickable references, not
+intentionally included in spoken text. This relies on the conversational
+instructions avoiding inline markers; it is **not a deterministic speech filter**
+or a guarantee that the model can never verbalize a reference.
+
+### Summary and save
+
+```text
+Spoken request or Finish button
+  → same conversation + regional model → structured draft
+  → factual/source/position validation → review UI
+  → optional versioned edits → validation again
+  → explicit approval → frozen DOCX → Graph upload → confirmed link
+```
+
+Summary generation uses a direct backend model request with the existing
+conversation and repository instructions; it does not create a second agent.
+The separate validator checks facts, source adequacy and the user's expressed
+position. A subjective edit is allowed to change that position, but not invent
+document facts.
+
+Every summary preserves these headings:
+
+- **Haltung zum Thema**
+- **Fragen, die noch geklärt werden müssen**
+- **Gegenpositionen**
+
+The backend supplies identity attribution, destination, filename and version.
+Stale approvals and unvalidated drafts cannot be saved. Retries reuse the same
+approved document and remote item rather than silently overwriting unrelated
+content. SharePoint can add Office package metadata, so DOCX verification
+preserves authored content while allowing narrowly recognized metadata changes;
+raw ZIP byte equality is not claimed.
+
+## Run locally
+
+Requirements: Python 3.12, [uv](https://docs.astral.sh/uv/), Azure CLI sign-in for
+Foundry, and an approved Graph identity with access to the configured folders.
+For avatars, use a browser with H.264 WebRTC support, such as an appropriately
+configured desktop Chrome or Edge. The network must permit the required
+WebRTC/TURN connectivity.
+
+For a new checkout, copy [.env.example](.env.example) to ignored `.env` and fill in
+real configuration from deployment outputs; do not overwrite an existing setup.
+The detailed [setup guide](docs/setup.md) covers Azure and Microsoft 365.
 
 ```bash
 uv sync --locked --no-dev
-uv run --frozen --no-dev uvicorn app.main:app --host 127.0.0.1 --port 8000 --no-access-log
+uv run --frozen --no-sync uvicorn app.main:app \
+  --host 127.0.0.1 --port 8010 --no-access-log
 ```
 
-Open http://127.0.0.1:8000. The supported start command binds to loopback only.
-Do not expose this development server remotely. Host validation is an additional
-check, not a replacement for authentication. Cloud adapters are implemented but
-the synthetic-input journey is verified, not human audio hardware. This remains a localhost, single-user,
-synthetic-data demo; remote access and real customer data are not approved.
+Open **http://localhost:8010**. Keep the terminal running. `npm start` is an
+alternative shortcut on port **8000**, not 8010.
 
-With Node.js installed, `npm start` is a shortcut for the same server command;
-it does not run tests or wait for GitHub.
+1. Select **App-Zugriff verbinden** in application mode.
+2. Optionally enable **Avatar verwenden**, then start a session.
+3. Enable the microphone explicitly, or type in the attached chat composer.
+4. Say **“Fasse unser Gespräch bitte zusammen”** or use the summary button.
+5. Review the draft, apply any edits, then explicitly approve saving.
 
-## Optional Local Debugging
+A request such as “Zusammenfassung erstellen und freigeben” creates the review
+draft; it does not approve an unseen version. Recognition supports a bounded set
+of natural affirmative constructions, not unrestricted language understanding.
+Negative, quoted/reported and ambiguous commands do not silently trigger saving.
 
-GitHub Actions and mandatory test-driven development are out of scope for this
-demo. Develop and run locally, inspect server/browser errors directly, and use
-only the focused checks that help diagnose the current problem. No remote run
-or full test suite is a prerequisite for continuing development.
+Stop releases the voice connection. Session deletion also removes its Foundry
+conversation, but **does not delete saved SharePoint files**. To avoid duplicate
+greetings/context, the same voice session cannot reconnect; create a new session.
+HTTP review/save recovery remains available after a voice disconnect.
 
-The existing checks remain available on demand. To use them, install the dev
-dependencies (Node.js 24 is needed for the browser checks):
+## Configuration and identity
+
+Representative non-secret choices for the approved demo:
+
+```dotenv
+FOUNDRY_MODEL_DEPLOYMENT_NAME=gpt-5.1
+VOICE_DELIVERY_MODE=streaming
+VOICE_AVATAR_ENABLED=true
+VOICE_AVATAR_CHARACTER=harry
+VOICE_AVATAR_STYLE=casual
+VOICE_NAME=de-DE-Florian:DragonHDLatestNeural
+GRAPH_AUTH_MODE=application
+GRAPH_APPLICATION_CREDENTIALS_FILE=.env.graph-application
+```
+
+`VOICE_AVATAR_ENABLED` is the active avatar capability flag; the legacy
+`AVATAR_ENABLED` setting is not used. Avatar selection is also required per session.
+
+| Service | Identity used |
+|---|---|
+| Foundry and Voice Live | Backend Azure CLI credential in the configured tenant |
+| SharePoint, application mode | Explicitly approved application with existing `Sites.Selected` grants |
+| SharePoint, delegated alternative | Public-client device sign-in with `User.Read` + `Files.ReadWrite`; this route returned folder-access 403s in the demo tenant |
+| Browser | Local session cookie/origin checks; no Azure service bearer token or client secret |
+
+The separate ignored application-credential file contains `GRAPH_TENANT_ID`,
+`GRAPH_APP_CLIENT_ID` and `GRAPH_APP_CLIENT_SECRET`. Only these settings are used;
+the file does not override other application configuration. Required short-lived
+ICE credentials reach the browser for WebRTC but are not recorded.
+
+Prefer configured canonical folder URLs plus verified drive/folder IDs. Sharing
+links are also supported for metadata resolution, but the app never automatically
+redeems links or grants new access. Input and output must be distinct,
+non-overlapping folders.
+
+**Application identity is not per-participant authorization.** Folder/manifest
+checks do not reduce the token to two folders or change SharePoint ACLs. No
+anonymous sharing links, additional consent grants or permission broadening are
+performed as an automatic fallback.
+
+## Diagnostics and verification
+
+Connection failures show a **Diagnose-ID** linked to terminal output and private,
+rotating, ignored `.local/diagnostics.jsonl` records:
+
+```bash
+tail -n 5 .local/diagnostics.jsonl
+```
+
+Diagnostics retain safe browser WebRTC states, codecs, ICE error codes, service
+messages and correlation IDs. They omit raw SDP, ICE credentials, access tokens
+and conversation/media dumps. Review even redacted logs before sharing.
+
+Explicit live commands, run only against approved synthetic destinations:
+
+```bash
+# Read-only folder metadata, no document contents:
+uv run --frozen --no-sync python scripts/live_check.py --resolve-folders
+
+# Billable Foundry model call:
+uv run --frozen --no-sync python scripts/live_check.py --foundry-only
+
+# Writes the six approved synthetic PDFs; then reads them back:
+uv run --frozen --no-sync python scripts/live_check.py --upload-corpus
+
+# Writes/downloads a synthetic Word example:
+uv run --frozen --no-sync python scripts/live_check.py --save-example
+```
+
+Local tests are available but no CI/full-suite gate is required for this demo:
 
 ```bash
 uv sync --locked
 npm ci
 npx playwright install chromium
+uv run --frozen --no-sync pytest
+npx playwright test
 ```
 
-On Linux, missing browser libraries may require an administrator to run the
-documented `npx playwright install --with-deps chromium` setup command.
+Browser tests use an isolated server on port 8765 and explicitly clear cloud
+configuration. Mocked signaling tests do not prove real avatar frames or network
+compatibility. The installed Linux test Chromium previously lacked H.264 even
+though the operator's desktop browser supported it.
 
-```bash
-npm run test:python
-npm run test:e2e
-npx playwright show-report
-```
+## Limits and deployment boundaries
 
-Playwright starts/stops a real FastAPI server on port 8765; it fails rather than
-reusing an unknown existing process. Each browser test gets an isolated context.
-Python tests generate and reopen actual DOCX bytes in memory, without Office.
+- Six manifest PDFs maximum, eight pages and 2 MB per PDF, 100000 extracted
+  characters total. Source ID/version is rechecked during download; no silent
+  truncation or cross-session corpus cache.
+- Session limits: 30 user turns, 30000 user-text characters, 30 minutes.
+  Source changes are picked up on a new session; mid-session permission changes
+  are not continuously rechecked.
+- In-memory sessions/tokens. Crashes can leave service-side conversations;
+  cleanup is limited to known owned artifacts, never an entire shared site.
+- Model deployment is GPT-5.1 Standard in Sweden Central. Provisioning rejects
+  global SKUs. Standard processing is bounded to the selected Azure geography,
+  not a fixed datacenter. This is not an end-to-end EU Data Boundary certification
+  for all Speech, Foundry and Microsoft 365 processing.
+- Existing C2 reduced-scope and multi-user/privacy limitations remain. Streaming,
+  model validation and synthetic tests are not production assurance.
+- No raw human-audio persistence by default. Never commit `.env*` credentials,
+  local logs, private summaries or reference checkouts.
 
-Local reports, screenshots, traces, and server output can be inspected directly
-by the coding assistant during development. `npm test` is an optional combined
-check, not a required gate. See [debugging notes](docs/testing.md).
-Browser traces must never be enabled on real private user conversations without
-an explicit data-handling decision.
+## Code map and further reading
 
-## Configuration and Next Integration Check
+| Path | Responsibility |
+|---|---|
+| `app/main.py`, `app/sessions.py` | Local API, authoritative session/review/version/save state |
+| `app/voice.py`, `app/avatar.py` | Voice Live events, spoken commands, media/signaling bounds |
+| `app/foundry.py`, `app/source_attribution.py` | Agent setup, model requests, validation, asynchronous sources |
+| `app/graph.py`, `app/grounding.py` | Identity, approved folder/file access and PDF snapshot |
+| `app/export.py`, `app/document_integrity.py` | DOCX rendering and stored-content verification |
+| `app/static/` | Vanilla browser UI, WebRTC avatar, microphone AudioWorklet |
+| `agent/instructions.md`, `sample-data/` | Versioned behavior and synthetic corpus source |
+| `infra/`, `scripts/` | Bicep, setup and explicitly invoked diagnostics |
 
-Model defaults are GPT-5.1 `2025-11-13`, Standard, capacity 100 in Sweden Central.
-Provisioning rejects GlobalStandard; no global fallback is configured.
-Standard constrains inference to the selected Azure geography, not necessarily
-one datacenter/region within that geography. This is not a blanket end-to-end
-EU Data Boundary assessment of Voice Live, Foundry storage and Microsoft 365.
-See [Microsoft's deployment-type guidance](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/concepts/deployment-types).
-
-`scripts/check_model.py` is an explicitly billable live diagnostic using the real
-SharePoint corpus: typed input over Voice Live, generated audio (not persisted),
-evidence validation and a structured summary. It cleans up its conversation and
-saves timing/status metrics to ignored `.local/model-check.json`. It does not
-exercise microphone capture, browser playback or user approval/save.
-
-[.env.example](.env.example) records the configuration names consumed by the app.
-Keep real client IDs, deployment endpoints and SharePoint sharing-link URLs in
-ignored `.env`, not documentation, deployment-state records or screenshots.
-`GRAPH_AUTH_MODE=delegated` uses interactive device sign-in with `GRAPH_CLIENT_ID`.
-The approved demo uses `GRAPH_AUTH_MODE=application` and
-`GRAPH_APPLICATION_CREDENTIALS_FILE` pointing to a separate ignored file containing
-`GRAPH_TENANT_ID`, `GRAPH_APP_CLIENT_ID` and `GRAPH_APP_CLIENT_SECRET`. The file must
-remain inside the local project; its other settings do not override the app.
-No token or secret is returned to the browser. Never commit credentials, raw audio
-or summaries. The backend uses Azure CLI identity only for Foundry.
-
-- Keep `SHAREPOINT_INPUT_FOLDER_URL` and `SHAREPOINT_OUTPUT_FOLDER_URL`. Supply
-  approved HTTPS commercial SharePoint folder sharing links for initial Graph
-  `/shares` resolution, without automatic link redemption or new access grants.
-- Alternatively, pair each canonical folder URL with its
-  `SHAREPOINT_INPUT_DRIVE_ID` / `SHAREPOINT_INPUT_FOLDER_ID` or
-  `SHAREPOINT_OUTPUT_DRIVE_ID` / `SHAREPOINT_OUTPUT_FOLDER_ID`. IDs become
-  authoritative only after Graph validation; never guess them from a sharing link.
-  Direct URLs without paired IDs are unsupported because there is no site discovery.
-- Input/output separation is checked against resolved canonical URLs and IDs.
-  Missing configuration or denied access fails explicitly, never to local PDFs.
-- Neither delegated `Files.ReadWrite` nor application `Sites.Selected` is a
-  two-folder token boundary. Application mode uses the app's existing site grants,
-  not the browser user's SharePoint rights; folder allowlists do not change ACLs.
-  Reviewer management and multi-user privacy remain deferred; the approved Graph
-  route retains its reduced-scope **C2 incomplete** label.
-
-The [setup guide](docs/setup.md) documents the read-only registration check,
-explicit `--apply --narrow-permissions` legacy migration, and operator review
-before ordinary device consent. Setup never grants consent or directory roles;
-admin consent or tenant-policy changes are not the default remedy for a denial.
-
-Next checkpoint: rehearse with the operator's actual microphone and speakers,
-interrupt an answer, exercise an unsupported question and inspect perceived latency.
-The synthetic-input combined journey and actual reviewed Word save passed;
-they do not establish physical audio quality or universal model behavior.
-Azure/Graph checks remain explicitly opted-in and local;
-`--upload-corpus` and `--save-example` write approved synthetic artifacts.
+- [Setup and troubleshooting](docs/setup.md)
+- [Current handoff](docs/handoff.md)
+- [Test evidence and limitations](docs/testing.md)
+- [Agreed v2 plan](docs/demo-v2-plan.md) and [implementation brief](plan.md)
+- [Voice Live with Foundry agents](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/voice-live-agents-quickstart)
+- [Standard avatars](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/text-to-speech-avatar/standard-avatars)
+- [Deployment types and processing geography](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/concepts/deployment-types)
+- [Salescoach reference](https://github.com/Azure-Samples/voicelive-api-salescoach):
+  reference for native avatar signaling and conversational UI patterns, not a
+  replacement for this app's SharePoint, validation or approval architecture.

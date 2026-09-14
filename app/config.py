@@ -150,6 +150,8 @@ class Settings:
     graph_application_credentials_file: str = ""
     voice_delivery_mode: str = "strict"
     avatar_enabled: bool = False
+    avatar_character: str = "lisa"
+    avatar_style: str = "casual-sitting"
 
     @classmethod
     def load(cls) -> "Settings":
@@ -173,6 +175,8 @@ class Settings:
             graph_application_credentials_file=os.getenv("GRAPH_APPLICATION_CREDENTIALS_FILE", ""),
             voice_delivery_mode=os.getenv("VOICE_DELIVERY_MODE", "strict").strip().lower(),
             avatar_enabled=os.getenv("VOICE_AVATAR_ENABLED", "false").strip().lower() == "true",
+            avatar_character=os.getenv("VOICE_AVATAR_CHARACTER", "lisa").strip(),
+            avatar_style=os.getenv("VOICE_AVATAR_STYLE", "casual-sitting").strip(),
         )
 
     def application_credentials_path(self) -> Path:
@@ -276,6 +280,13 @@ class Settings:
         }
         issues = [f"{name} fehlt" for name, value in required.items() if not value]
         issues.extend(self.graph_issues())
+        if self.avatar_enabled:
+            for name, value in (
+                ("VOICE_AVATAR_CHARACTER", self.avatar_character),
+                ("VOICE_AVATAR_STYLE", self.avatar_style),
+            ):
+                if not re.fullmatch(r"[a-z][a-z0-9-]{0,63}", value):
+                    issues.append(f"{name} muss eine gueltige Standard-Avatar-Bezeichnung sein.")
         if self.voice_delivery_mode not in ("strict", "streaming"):
             issues.append("VOICE_DELIVERY_MODE muss strict oder streaming sein.")
         issues.extend(self.folder_issues())

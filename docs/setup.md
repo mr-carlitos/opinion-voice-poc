@@ -309,6 +309,14 @@ Owned item IDs are recorded under ignored `.local/`; no script deletes the site.
 
 ## Browser journey
 
+Summary commands also accept polite requests and conversational lead-ins, for
+example "Fasse unser Gespraech bitte zusammen", "Ich moechte jetzt eine
+Zusammenfassung", and "Ja, ist gut. Also eben OK. Jetzt Zusammenfassung erstellen
+und fuer diesen Entwurf so freigeben." These enter the same validated draft/review
+flow as the button; they do not authorize saving an unseen draft. Recognition is
+bounded and deterministic, not universal language understanding. Negated,
+reported/quoted, conditional or metalinguistic statements remain conversation.
+
 Open the localhost URL, select **App-Zugriff verbinden** (or sign in to Microsoft
 365 in delegated mode), and start a session. Select **Mikrofon einschalten**
 for spoken input; select **Mikrofon stummschalten** to stop capture.
@@ -400,7 +408,29 @@ the local server. The user must also select **Avatar verwenden** before creating
 each session. Strict mode never accepts an avatar session. An unchecked selection
 uses ordinary PCM audio even when the server capability is enabled.
 
-The stock character is `lisa`, style `casual-sitting`, not a custom likeness.
+The current demo selects stock character `harry`, style `casual`, with German
+male voice `de-DE-ConradNeural`. Set `VOICE_AVATAR_CHARACTER`,
+`VOICE_AVATAR_STYLE` and `VOICE_NAME` in ignored `.env` before restarting.
+The former `lisa` / `casual-sitting` / `de-DE-KatjaNeural` combination remains
+available. The new configuration was accepted by Voice Live on 14 September;
+its rendered appearance and voice preference still require operator review.
+These are stock avatars, not custom likenesses.
+
+Speech follow-up (14 September): current `.env` now selects the male HD voice
+`de-DE-Florian:DragonHDLatestNeural`; Conrad remains an explicit alternative.
+Voice Live accepted Florian HD with Harry/casual, and an audio-only live probe
+returned the correct30-vehicle fact without inline source markers. Naturalness
+and actual avatar playback still require listening in the operator browser.
+
+Conversational instructions no longer request document/page markers inside the
+spoken text. Streaming answers receive a separate, nonblocking source-attribution
+check after completion; references appear on their original transcript item.
+Pending/unsupported/failed attribution is visibly labelled. At most two source
+checks run concurrently; excess checks are marked incomplete, not invented.
+This adds model usage but does not hold up audio playback. It cannot retract a
+spoken unsupported statement, and prompt adherence is not a deterministic audio
+filter. Strict mode still checks before playback. Structured summary source
+appendices, validation and approval remain unchanged.
 Native media uses the same Voice Live prompt-agent conversation, not a separate
 synthesizer or model. No deployment, region, grants or service identity change is
 needed by the local code. Existing GPT-5.1 Standard in Sweden Central is unchanged.

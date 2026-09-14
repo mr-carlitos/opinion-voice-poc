@@ -10,6 +10,7 @@ let microphoneOn = false, playbackOn = true, microphoneBusy = false;
 let voiceConnected = false, responsePending = false;
 let avatarConnected = false;
 const streamingItems = new Map();
+const assistantItems = new Map();
 
 function conversationState() {
   const state = playing.length ? 'playing' : responsePending ? 'processing'
@@ -33,7 +34,9 @@ function avatarControl(method, ...args) {
 
 function audioControls() {
   get('microphone').setAttribute('aria-pressed', String(microphoneOn));
-  get('microphone').textContent = microphoneOn ? 'Mikrofon stummschalten' : 'Mikrofon einschalten';
+  const microphoneLabel = microphoneOn ? 'Mikrofon stummschalten' : 'Mikrofon einschalten';
+  get('microphone').setAttribute('aria-label', microphoneLabel);
+  get('microphone').title = microphoneLabel;
   get('playback').setAttribute('aria-pressed', String(playbackOn));
   get('playback').textContent = playbackOn ? 'Ton ausschalten' : 'Ton einschalten';
   get('voice-hint').textContent = microphoneOn
@@ -150,6 +153,7 @@ function playAudio(message) {
 }
 
 function transcript(role, text, references = []) {
+  const follow = transcriptAtEnd();
   const item = document.createElement('li');
   item.className = role;
   const label = document.createElement('strong');
@@ -169,9 +173,14 @@ function transcript(role, text, references = []) {
   }
   get('transcript').append(item);
   get('transcript-count').textContent = `(${get('transcript').children.length})`;
-  if (get('transcript-panel').open) get('transcript').scrollTop = get('transcript').scrollHeight;
+  if (follow) get('transcript').scrollTop = get('transcript').scrollHeight;
   if (role === 'assistant') lastAssistant = item;
   return item;
+}
+
+function transcriptAtEnd() {
+  const list = get('transcript');
+  return list.scrollHeight - list.scrollTop - list.clientHeight < 48;
 }
 
 function streamingItem(itemId) {
@@ -179,6 +188,7 @@ function streamingItem(itemId) {
     const item = transcript('assistant', '');
     item.dataset.streaming = 'true';
     streamingItems.set(itemId, item);
+    assistantItems.set(itemId, item);
   }
   return streamingItems.get(itemId);
 }
@@ -305,6 +315,7 @@ function received(message) {
     conversationState();
     assistantItem = message.item_id;
     if (streamingItems.has(message.item_id)) {
+      const follow = transcriptAtEnd();
       const item = streamingItems.get(message.item_id);
       item.querySelector('p').textContent = message.text;
       item.dataset.streaming = 'false';
@@ -318,14 +329,47 @@ function received(message) {
       }
       streamingItems.delete(message.item_id);
       lastAssistant = item;
-    } else transcript('assistant', message.text, message.sources);
+      if (follow) get('transcript').scrollTop = get('transcript').scrollHeight;
+    } else {
+      assistantItems.set(message.item_id, transcript('assistant', message.text, message.sources));
+    }
+    if (message.source_status === 'pending') {
+      const note = document.createElement('span');
+      note.className = 'source-status muted';
+      note.textContent = 'Quellen werden nachtraeglich geprueft …';
+      assistantItems.get(message.item_id)?.append(note);
+    }
+  }
+  if (message.type === 'assistant_sources') {
+    const item = assistantItems.get(message.item_id);
+    if (!item) return;
+    item.querySelectorAll('.source-status,.attributed-source').forEach(node => node.remove());
+    for (const reference of message.sources || []) {
+      const source = sources.find(entry => entry.document_id === reference.document_id);
+      if (!source) continue;
+      const link = document.createElement('a');
+      link.className = 'attributed-source';
+      link.href = source.url; link.target = '_blank'; link.rel = 'noopener noreferrer';
+      link.textContent = `${source.document_id}${reference.page ? `, Seite ${reference.page}` : ''}`;
+      item.append(link, ' ');
+    }
+    const note = document.createElement('span');
+    note.className = 'source-status muted';
+    note.textContent = message.source_status === 'checked'
+      ? (message.sources?.length ? 'Quellen nachtraeglich geprueft.' : 'Keine Dokumentquelle erforderlich.')
+      : message.source_status === 'unsupported'
+        ? 'Achtung: Antwort nachtraeglich nicht ausreichend belegt.'
+        : 'Quellenpruefung nicht abgeschlossen. Antwort nicht als geprueft behandeln.';
+    item.append(note);
   }
   if (message.type === 'assistant_start') {
     assistantItem = message.item_id;
     streamingItem(message.item_id);
   }
   if (message.type === 'assistant_delta' && !interruptedItems.has(message.item_id)) {
+    const follow = transcriptAtEnd();
     streamingItem(message.item_id).querySelector('p').textContent += message.text;
+    if (follow) get('transcript').scrollTop = get('transcript').scrollHeight;
   }
   if (message.type === 'assistant_interrupted') {
     const item = streamingItems.get(message.item_id);
@@ -387,6 +431,7 @@ get('start').onclick = () => action(async () => {
 });
 get('microphone').onclick = () => action(async () => {
   if (microphoneBusy) return;
+  const restoreFocus = document.activeElement === get('microphone');
   microphoneBusy = true;
   get('microphone').disabled = true;
   try { await microphone(!microphoneOn); }
@@ -394,6 +439,9 @@ get('microphone').onclick = () => action(async () => {
   finally {
     microphoneBusy = false;
     get('microphone').disabled = socket?.readyState !== WebSocket.OPEN;
+    if (restoreFocus && !get('microphone').disabled && document.activeElement === document.body) {
+      get('microphone').focus({ preventScroll: true });
+    }
   }
 });
 get('playback').onclick = () => {

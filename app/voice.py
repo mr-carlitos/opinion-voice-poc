@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import re
+import unicodedata
 
 from azure.ai.voicelive.aio import connect
 from azure.identity.aio import AzureCliCredential
@@ -12,6 +13,7 @@ from app.diagnostics import record_diagnostic
 from app.foundry import Foundry
 from app.graph import Graph, ServiceError
 from app.sessions import Session
+from app.source_attribution import attribute_sources
 
 logger = logging.getLogger(__name__)
 AVATAR_HANDSHAKE_TIMEOUT = 35
@@ -37,7 +39,11 @@ def voice_session_settings(settings, avatar=False):
         },
     }
     if avatar:
-        result["avatar"] = {"character": "lisa", "style": "casual-sitting", "customized": False}
+        result["avatar"] = {
+            "character": getattr(settings, "avatar_character", "lisa"),
+            "style": getattr(settings, "avatar_style", "casual-sitting"),
+            "customized": False,
+        }
     return result
 
 
@@ -61,18 +67,41 @@ def cleanup_error_request(failure, requests):
 
 
 def summary_requested(text: str) -> bool:
-    normalized = re.sub(r"[^\w\s]", " ", text.casefold())
-    normalized = " ".join(normalized.split())
-    normalized = re.sub(r"^(?:(?:ok|okay|also|gut|jetzt|bitte|dann)\s+)+", "", normalized)
-    return normalized in {
-        "zusammenfassung erstellen",
-        "die zusammenfassung erstellen",
-        "meine meinungsbildung zusammenfassen",
-        "zusammenfassen",
-        "erstelle eine zusammenfassung",
-        "erstelle die zusammenfassung",
-        "erstellen sie eine zusammenfassung",
-    }
+    # Match the entire utterance, not a command hidden in reported speech,
+    # negation or a condition. Unknown wording deliberately stays in chat.
+    if len(text) > 6000 or re.search(r"""["'„“”‚‘’«»‹›`\\]""", text):
+        return False
+    normalized = unicodedata.normalize("NFKC", text).casefold()
+    for umlaut, spelling in (("ä", "ae"), ("ö", "oe"), ("ü", "ue")):
+        normalized = normalized.replace(umlaut, spelling)
+    normalized = " ".join(re.sub(r"[.,!?;:…]", " ", normalized).split())
+    if len(normalized.split()) > 80:
+        return False
+
+    filler = r"(?:ja|ok|okay|also|eben|gut|ist gut|alles klar|jetzt|nun|bitte|dann)"
+    polite = r"(?:(?:jetzt|nun|bitte|doch|mal|einmal|gerne) )*"
+    summary = r"(?:(?:eine|die|meine|unsere) )?zusammenfassung"
+    subject = (
+        r"(?:das|dies|unser gespraech|das gespraech|unsere unterhaltung|"
+        r"meine meinungsbildung)"
+    )
+    command = (
+        rf"(?:{summary} {polite}erstellen|"
+        rf"(?:erstelle|erstellen sie) {polite}{summary}|"
+        rf"(?:(?:{subject}) )?{polite}zusammenfassen|"
+        rf"fasse {polite}{subject} {polite}zusammen|"
+        rf"fassen sie {polite}{subject} {polite}zusammen|"
+        rf"ich (?:moechte|will) {polite}{summary}(?: {polite}erstellen lassen)?|"
+        rf"(?:kannst du|koenntest du|koennen sie|koennten sie) {polite}"
+        rf"(?:{subject} {polite}zusammenfassen|{summary} {polite}erstellen))"
+    )
+    # A release requested before seeing the draft is only a request for review.
+    # It never substitutes for the separate, version-bound save confirmation.
+    release = r"(?: und (?:fuer diesen entwurf )?(?:so )?freigeben)?"
+    return (
+        re.fullmatch(rf"(?:{filler} )*{command}(?: bitte| jetzt| danke)*{release}", normalized)
+        is not None
+    )
 
 
 async def bridge(
@@ -116,6 +145,13 @@ async def bridge(
             cleanup_requests = {}
             deleted_items = set()
             stream_announced = False
+            source_tasks = set()
+
+            def source_finished(task):
+                source_tasks.discard(task)
+                if not task.cancelled() and task.exception():
+                    logger.warning("Post-response source result could not be delivered.")
+
             avatar_state = "starting" if avatar else "off"
             avatar_ready = asyncio.Event()
             service_session_id = ""
@@ -444,16 +480,6 @@ async def bridge(
                             raise ServiceError("Antwort ohne pruefbaren Text; nicht wiedergegeben.")
                         if streaming:
                             references = []
-                            for document_id, page in re.findall(
-                                r"\[([A-Za-z0-9_-]+):(\d+)\]", text
-                            ):
-                                if (
-                                    document_id in session.corpus.sources
-                                    and 1 <= int(page) <= session.corpus.pages[document_id]
-                                ):
-                                    reference = {"document_id": document_id, "page": int(page)}
-                                    if reference not in references:
-                                        references.append(reference)
                             supported = True
                         else:
                             verdict = await asyncio.to_thread(
@@ -471,6 +497,7 @@ async def bridge(
                                     "text": text,
                                     "item_id": assistant_item,
                                     "sources": references,
+                                    "source_status": "pending" if streaming else "checked",
                                     "evidence_status": (
                                         "not_independently_verified" if streaming else "verified"
                                     ),
@@ -486,6 +513,29 @@ async def bridge(
                             if released:
                                 await socket.send_json({"type": "audio_done"})
                                 await status("Bereit.")
+                                if streaming:
+                                    if len(source_tasks) < 2:
+                                        task = asyncio.create_task(
+                                            attribute_sources(
+                                                socket,
+                                                foundry,
+                                                session.corpus,
+                                                list(session.user_turns),
+                                                text,
+                                                assistant_item,
+                                            )
+                                        )
+                                        source_tasks.add(task)
+                                        task.add_done_callback(source_finished)
+                                    else:
+                                        await socket.send_json(
+                                            {
+                                                "type": "assistant_sources",
+                                                "item_id": assistant_item,
+                                                "sources": [],
+                                                "source_status": "busy",
+                                            }
+                                        )
                         elif not cancelled:
                             await error(
                                 "Antwort nicht ausreichend belegt; nicht wiedergegeben. "
@@ -718,6 +768,7 @@ async def bridge(
                 for task in done:
                     task.result()
             finally:
+                tasks.extend(source_tasks)
                 if finishing:
                     tasks.append(finishing)
                 for task in tasks:

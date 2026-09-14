@@ -19,11 +19,36 @@
         <p class="eyebrow">AlpenMobil Demo AG</p>
         <h1 id="title">Eine eigene Position.</h1>
         <p class="intro">Gedanken aussprechen. Perspektiven abwaegen. Die eigene Haltung festhalten.</p>
+        <section class="connection-panel" aria-labelledby="connection-title">
+          <div class="connection-heading">
+            <h2 id="connection-title">Verbindung &amp; Sitzung</h2>
+            <p class="status" role="status">Verbindung wird geprueft</p>
+          </div>
+          <div class="actions">
+            <button id="start" type="button" disabled>Sitzung starten</button>
+            <button id="stop" type="button" disabled>Stoppen</button>
+            <button id="delete" type="button" disabled>Sitzung loeschen</button>
+            <button id="retry" type="button">Erneut pruefen</button>
+            <button id="sign-in" type="button" disabled>Microsoft 365 anmelden</button>
+          </div>
+          <p id="delivery-mode" class="muted">Strikter Modus: Antworten werden vor der Wiedergabe geprueft.</p>
+          <div id="login" hidden>
+            <a id="verification" target="_blank" rel="noopener noreferrer">Microsoft-Anmeldung oeffnen</a>
+            <p>Einmalcode: <strong id="device-code"></strong></p>
+          </div>
+          <details class="connection-details">
+            <summary>Verbindungsdetails</summary>
+            <p id="detail">Dienste werden geprueft.</p>
+            <p id="auth-mode" class="muted"></p>
+          </details>
+        </section>
         <section class="conversation-stage" aria-labelledby="stage-title">
           <div class="stage-heading">
             <h2 id="stage-title">Ihr Denkpartner</h2>
             <span id="conversation-state" data-state="idle" aria-live="polite">Noch keine Sitzung</span>
           </div>
+          <div class="conversation-workspace">
+          <div class="avatar-column">
           <div class="avatar-frame">
             <video id="avatar-video" muted playsinline hidden aria-label="Video des virtuellen Denkpartners"></video>
             <div id="avatar-placeholder">
@@ -41,44 +66,36 @@
             <span id="avatar-state" class="muted">Audio-Modus · Avatar noch nicht verfuegbar.</span>
             <button id="avatar-fallback" type="button" hidden>Neue Sitzung ohne Avatar vorbereiten</button>
           </div>
-        <p class="status" role="status">Verbindung wird geprueft</p>
         <div class="voice-toolbar" role="group" aria-label="Gespraechssteuerung">
-          <button id="microphone" type="button" aria-pressed="false" aria-describedby="voice-hint" disabled>Mikrofon einschalten</button>
+          <button id="microphone" type="button" aria-label="Mikrofon einschalten" title="Mikrofon einschalten" aria-pressed="false" aria-describedby="voice-hint" disabled>
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <rect x="9" y="2" width="6" height="12" rx="3"></rect>
+              <path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"></path>
+              <path class="mic-slash" d="M3 3l18 18"></path>
+            </svg>
+          </button>
           <button id="interrupt" type="button" disabled>Antwort unterbrechen</button>
           <button id="playback" type="button" aria-pressed="true">Ton ausschalten</button>
           <button id="finish" type="button" disabled>Zusammenfassung erstellen</button>
-          <p id="voice-hint">Nach dem Sitzungsstart Mikrofon einschalten und einfach sprechen.</p>
+          <p id="voice-hint">Mikrofon bleibt aus, bis Sie es einschalten.</p>
           <p class="spoken-helper">Zum Abschluss sagen: <q>OK, jetzt Zusammenfassung erstellen</q></p>
           <span id="turn-count">0 / 30 Beitraege</span>
         </div>
+          </div>
+          <div class="chat-column">
+            <section id="transcript-panel" aria-labelledby="transcript-title">
+              <h2 id="transcript-title">Gespraechsverlauf <span id="transcript-count" class="muted">(0)</span></h2>
+              <ol id="transcript" aria-label="Gespraech" aria-live="polite" tabindex="0"></ol>
+            </section>
+            <form id="composer">
+              <label for="message">Lieber tippen? Ihr Beitrag</label>
+              <textarea id="message" rows="2" maxlength="6000" placeholder="Was beschaeftigt Sie zu diesem Thema?" disabled></textarea>
+              <button id="send" type="submit" disabled>Senden</button>
+            </form>
+          </div>
+          </div>
         </section>
-        <details class="connection-panel" open>
-        <summary>Verbindung &amp; Sitzung</summary>
-        <p id="detail">Dienste werden geprueft.</p>
-        <p id="auth-mode" class="muted"></p>
-        <p id="delivery-mode" class="muted">Strikter Modus: Antworten werden vor der Wiedergabe geprueft.</p>
-        <div id="login" hidden>
-          <a id="verification" target="_blank" rel="noopener noreferrer">Microsoft-Anmeldung oeffnen</a>
-          <p>Einmalcode: <strong id="device-code"></strong></p>
-        </div>
-        <div class="actions">
-          <button id="retry" type="button">Erneut pruefen</button>
-          <button id="sign-in" type="button" disabled>Microsoft 365 anmelden</button>
-          <button id="start" type="button" disabled>Sitzung starten</button>
-          <button id="stop" type="button" disabled>Stoppen</button>
-          <button id="delete" type="button" disabled>Sitzung loeschen</button>
-        </div>
-        </details>
-        <form id="composer">
-          <label for="message">Lieber tippen? Ihr Beitrag</label>
-          <textarea id="message" rows="2" maxlength="6000" placeholder="Was beschaeftigt Sie zu diesem Thema?" disabled></textarea>
-          <button id="send" type="submit" disabled>Senden</button>
-        </form>
         <p id="session-limit" class="muted"></p>
-        <details id="transcript-panel">
-          <summary>Gespraechsverlauf <span id="transcript-count" class="muted">(0)</span></summary>
-          <ol id="transcript" aria-label="Gespraech" aria-live="polite" tabindex="0"></ol>
-        </details>
         <details id="sources-panel">
         <summary>Freigegebene Unterlagen</summary>
         <ul id="sources"><li>Noch keine Quellen geladen.</li></ul>

@@ -5,6 +5,27 @@ const summary = {
   gegenpositionen: [], sources: [],
 };
 
+test('post-response sources attach to the original answer without changing speech text', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(() => {
+    sources = [{ document_id: 'D01', url: 'https://demo.sharepoint.com/source.pdf' }];
+    received({ type: 'assistant_start', item_id: 'first' });
+    received({ type: 'assistant', item_id: 'first', text: 'Der Pilot umfasst 30 Fahrzeuge.',
+      sources: [], source_status: 'pending' });
+    received({ type: 'assistant_start', item_id: 'second' });
+    received({ type: 'assistant', item_id: 'second', text: 'Ihre Meinung?', sources: [] });
+    received({ type: 'assistant_sources', item_id: 'first', source_status: 'checked',
+      sources: [{ document_id: 'D01', page: 1 }] });
+  });
+  await expect(page.locator('#transcript .assistant').first().locator('p')).toHaveText('Der Pilot umfasst 30 Fahrzeuge.');
+  await expect(page.locator('#transcript .assistant').first().locator('a')).toHaveText('D01, Seite 1');
+  await expect(page.locator('#transcript .assistant').last().locator('a')).toHaveCount(0);
+  await page.evaluate(() => received({
+    type: 'assistant_sources', item_id: 'second', source_status: 'failed', sources: [],
+  }));
+  await expect(page.locator('#transcript .assistant').last()).toContainText('nicht abgeschlossen');
+});
+
 test('streaming transcript updates one item and preserves interruption state', async ({ page }) => {
   await page.goto('/');
   await page.evaluate(() => {
@@ -28,6 +49,11 @@ test('streaming transcript updates one item and preserves interruption state', a
 });
 
 test('voice controls are accessible buttons with explicit audio state', async ({ page }) => {
+  await page.route('**/api/readiness', async route => {
+    const response = await route.fetch();
+    const readiness = await response.json();
+    await route.fulfill({ json: { ...readiness, avatar_available: false } });
+  });
   await page.goto('/');
   await expect(page.getByRole('button', { name: 'Mikrofon einschalten' })).toBeDisabled();
   await expect(page.locator('#microphone')).toHaveAttribute('aria-pressed', 'false');
@@ -45,10 +71,9 @@ test('stage offers honest audio fallback and secondary accessible details', asyn
   await expect(page.locator('#avatar-placeholder')).toBeVisible();
   await expect(page.locator('#avatar-state')).toContainText('Audio-Modus');
   await expect(page.getByText('OK, jetzt Zusammenfassung erstellen', { exact: false })).toBeVisible();
-  await expect(page.locator('#transcript')).toBeHidden();
-  await page.locator('#transcript-panel summary').focus();
-  await page.keyboard.press('Enter');
   await expect(page.locator('#transcript')).toBeVisible();
+  await page.locator('#transcript').focus();
+  await expect(page.locator('#transcript')).toBeFocused();
   await page.locator('#sources-panel summary').click();
   await expect(page.locator('#sources')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

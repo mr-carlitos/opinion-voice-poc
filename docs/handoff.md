@@ -4,6 +4,35 @@
 
 This section supersedes the historical 9 September notes below.
 
+- 14 September speech polish: local voice changed Conrad->Florian HD, Harry/casual
+  retained. Accepted together by Voice Live; live audio-only factual answer
+  contained30 vehicles with no technical citation markers. Separate post-response
+  evidence call recovered valid source references. Agent version4 reflects
+  shorter conversational phrasing and no inline spoken citation instructions.
+- Sources now arrive asynchronously on the original transcript item via
+  assistant_sources (checked/unsupported/failed/busy), with at most two in-flight
+  checks. No extra blocking speech gate in streaming mode. UI never interprets
+  failed attribution as validated; no guaranteed prompt adherence/no audible
+  marker proof for every possible turn. Summary validation/source appendix intact.
+  Restart operator server/new session for new voice/instructions; hard-refresh UI.
+- 14 September UI/intent work completed: connection controls above a unified
+  avatar/chat surface, composer attached below visible internally scrolling
+  transcript, compact mobile layout, accessible mic SVG with state/tooltip.
+  Natural summary requests include the operator's full missed utterance and
+  route to the same validated review action as the button, without saving.
+  Negative/quoted/conditional/meta wording remains ordinary conversation.
+  Combined local voice/config/review and desktop/mobile layout checks passed.
+  Runtime server was not restarted; new avatar/voice requires restart and new
+  session, browser layout requires hard refresh. Changes remain uncommitted.
+- 14 September feedback: the operator reports the avatar demo now works well.
+  New work groups avatar/chat/composer, moves session controls above them,
+  introduces microphone icons and broadens spoken summary intent while keeping
+  summary creation separate from save approval.
+- Avatar/voice selection is now configurable. Ignored `.env` selects `harry`,
+  `casual`, `de-DE-ConradNeural`; service accepted this exact configuration and
+  returned ICE on the existing regional resource. The probe did not establish
+  rendered appearance or subjective voice preference. Old combination remains
+  available; no model, region, grants or resource changes.
 - Diagnostic e428b451d4b4 identified the operator's actual avatar handshake failure:
   H264 supported, local offer created, ICE still gathering after30s, offer_sent=false.
   Browser previously waited exclusively for end-of-candidates. Added bounded3s

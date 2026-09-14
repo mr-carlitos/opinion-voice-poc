@@ -393,3 +393,184 @@ def test_spoken_approval_cannot_approve_newer_form_version(monkeypatch):
             await asyncio.gather(task, return_exceptions=True)
 
     asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("source", ["button", "spoken", "typed"])
+@pytest.mark.parametrize("delivery_mode", ["strict", "streaming"])
+@pytest.mark.parametrize("responding", [False, True])
+@pytest.mark.parametrize("validation_passed", [False, True])
+def test_natural_summary_uses_button_review_without_reply_or_save(
+    monkeypatch, source, delivery_mode, responding, validation_passed
+):
+    async def scenario():
+        upstream, browser = Transport(), Transport()
+        monkeypatch.setattr(voice, "connect", lambda **kwargs: upstream)
+        monkeypatch.setattr(voice, "AzureCliCredential", lambda **kwargs: Transport())
+        phrase = (
+            "Ja, ist gut. Also eben OK. Jetzt Zusammenfassung erstellen "
+            "und für diesen Entwurf so freigeben."
+        )
+        session = SimpleNamespace(
+            conversation_id="same",
+            corpus=None,
+            user_turns=["Meine Haltung"],
+            phase="conversation",
+            draft_version=0,
+        )
+        session.add_turn = session.user_turns.append
+        calls, approvals = [], []
+        validated_summary = object()
+
+        def summary(*args, user_turns):
+            assert user_turns == ["Meine Haltung"]
+            calls.append("summary")
+            if not validation_passed:
+                raise ServiceError("Zusammenfassung nicht ausreichend belegt.")
+            return validated_summary
+
+        def set_draft(value, *, validation_passed):
+            assert value is validated_summary and validation_passed
+            calls.append("draft")
+            session.phase, session.draft_version = "review", 1
+            return {"summary": {"title": "Entwurf"}, "version": 1}
+
+        session.set_draft = set_draft
+        session.save = lambda *args: approvals.append(args) or {}
+        settings = SimpleNamespace(
+            tenant_id="t",
+            voice_endpoint="e",
+            voice_api_version="v",
+            agent_name="a",
+            project_endpoint="e/p",
+            voice_name="v",
+            voice_delivery_mode=delivery_mode,
+        )
+        task = asyncio.create_task(
+            voice.bridge(
+                browser, session, settings, SimpleNamespace(version="2", summary=summary), None
+            )
+        )
+        try:
+            if responding:
+                await upstream.incoming.put({"type": "session.updated"})
+                await upstream.incoming.put({"type": "response.created"})
+                await until(lambda: any(x["type"] == "response.create" for x in upstream.sent))
+            if source == "spoken":
+                await upstream.incoming.put({"type": "input_audio_buffer.speech_started"})
+                await upstream.incoming.put(
+                    {
+                        "type": "conversation.item.input_audio_transcription.completed",
+                        "item_id": "spoken-command",
+                        "transcript": phrase,
+                    }
+                )
+            else:
+                await browser.incoming.put(
+                    {"type": "finish"} if source == "button" else {"type": "text", "text": phrase}
+                )
+            if responding:
+                await until(lambda: any(x["type"] == "response.cancel" for x in upstream.sent))
+                assert calls == []
+                await upstream.incoming.put(
+                    {
+                        "type": "response.done",
+                        "response": {"status": "cancelled", "output": [{"id": "unheard"}]},
+                    }
+                )
+            await until(
+                lambda: any(
+                    (x["type"] == "status" and x["message"].startswith("Entwurf bereit."))
+                    if validation_passed
+                    else x["type"] == "error"
+                    for x in browser.sent
+                )
+            )
+            assert calls == (["summary", "draft"] if validation_passed else ["summary"])
+            expected_drafts = (
+                [{"type": "draft", "summary": {"title": "Entwurf"}, "version": 1}]
+                if validation_passed
+                else []
+            )
+            assert [x for x in browser.sent if x["type"] == "draft"] == expected_drafts
+            assert session.phase == ("review" if validation_passed else "conversation")
+            assert approvals == []
+            assert session.user_turns == ["Meine Haltung"]
+            assert not any(
+                x["type"] in ("saved", "assistant", "assistant_start", "audio", "user")
+                for x in browser.sent
+            )
+            assert any(x["type"] == "error" for x in browser.sent) is not validation_passed
+            assert sum(x["type"] == "response.create" for x in upstream.sent) == int(responding)
+            assert not any(
+                x.get("item", {}).get("content", [{}])[0].get("text") == phrase
+                for x in upstream.sent
+            )
+            if responding:
+                assert any(
+                    x["type"] == "conversation.item.delete" and x["item_id"] == "unheard"
+                    for x in upstream.sent
+                )
+                if validation_passed:
+                    types = [x["type"] for x in browser.sent]
+                    assert types.index("interrupt") < types.index("draft")
+        finally:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("source", ["spoken", "typed"])
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Noch nicht zusammenfassen",
+        "Wie erstellt man eine Zusammenfassung?",
+        "Er sagte: Bitte zusammenfassen.",
+        "Kannst du das bitte zusammenfassen, wenn ich fertig bin?",
+        "Vielleicht eine Zusammenfassung?",
+    ],
+)
+def test_ambiguous_or_negative_summary_stays_in_chat(monkeypatch, source, text):
+    async def scenario():
+        upstream, browser = Transport(), Transport()
+        monkeypatch.setattr(voice, "connect", lambda **kwargs: upstream)
+        monkeypatch.setattr(voice, "AzureCliCredential", lambda **kwargs: Transport())
+        session = SimpleNamespace(
+            conversation_id="same", corpus=None, user_turns=[], phase="conversation"
+        )
+        session.add_turn = session.user_turns.append
+        settings = SimpleNamespace(
+            tenant_id="t",
+            voice_endpoint="e",
+            voice_api_version="v",
+            agent_name="a",
+            project_endpoint="e/p",
+            voice_name="v",
+        )
+        task = asyncio.create_task(
+            voice.bridge(browser, session, settings, SimpleNamespace(version="2"), None)
+        )
+        try:
+            if source == "spoken":
+                await upstream.incoming.put(
+                    {
+                        "type": "conversation.item.input_audio_transcription.completed",
+                        "item_id": "spoken",
+                        "transcript": text,
+                    }
+                )
+            else:
+                await browser.incoming.put({"type": "text", "text": text})
+            await until(lambda: any(x["type"] == "response.create" for x in upstream.sent))
+            assert session.user_turns == [text]
+            assert session.phase == "conversation"
+            assert [x for x in browser.sent if x["type"] == "user"] == [
+                {"type": "user", "text": text}
+            ]
+            assert not any(x["type"] in ("draft", "saved", "error") for x in browser.sent)
+        finally:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+
+    asyncio.run(scenario())
