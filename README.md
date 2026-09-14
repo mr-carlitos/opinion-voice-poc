@@ -6,6 +6,12 @@ railway documents and saving a reviewed opinion summary to SharePoint.
 **Scope:** presenter-led, localhost, single-user, synthetic-data demonstration.
 Not a production service or a claim of per-user SharePoint permission trimming.
 
+## Demo preview
+
+![German voice demo with a live avatar, conversation history, microphone controls and integrated text input](Meinungsbildungsagent.png)
+
+*Screenshot of the synthetic demo, provided by the operator on 14 September 2026.*
+
 ## Current state — 14 September 2026
 
 - Streaming conversation with a native Foundry Voice Live avatar and audio-only
