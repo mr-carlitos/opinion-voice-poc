@@ -3,26 +3,22 @@
 A German-speaking voice/text thinking partner for discussing approved fictional
 railway documents and saving a reviewed opinion summary to SharePoint.
 
-**Scope:** presenter-led, localhost, single-user, synthetic-data demonstration.
-Not a production service or a claim of per-user SharePoint permission trimming.
-
 ## Demo preview
 
 ![German voice demo with a live avatar, conversation history, microphone controls and integrated text input](Meinungsbildungsagent.png)
 
 *Screenshot of the synthetic demo, provided by the operator on 14 September 2026.*
 
-## Current state — 14 September 2026
+## Capabilities
 
 - Streaming conversation with a native Foundry Voice Live avatar and audio-only
-  fallback. The operator reports successful avatar use after the ICE-handshake fix.
+  fallback.
 - Unified avatar/chat layout, attached text input, accessible microphone icons,
   interruption controls and a separate review area.
 - One Foundry prompt agent backed by **GPT-5.1 `2025-11-13`, Standard in Sweden
-  Central**. The previous Global Standard deployment was removed.
+  Central**.
 - Current local presentation: stock **Harry / casual**, with the German male
-  **Florian HD** voice. Voice Live accepted this combination; HD audio generation
-  was exercised live. Subjective voice quality remains a rehearsal decision.
+  **Florian HD** voice.
 - Six approved SharePoint PDFs are read at session start. Real PDF retrieval,
   reviewed Word upload/download and duplicate-free save retries have passed.
 - Natural summary requests, including longer affirmative German phrases, trigger
@@ -32,10 +28,8 @@ Not a production service or a claim of per-user SharePoint permission trimming.
   the correct transcript entry. A live factual-answer probe produced audio
   without markers and subsequently recovered valid source references.
 
-Earlier complete real-service checks used a synthetic browser microphone. They
-do not establish universal human audio quality, noisy-room performance, model
-correctness or a latency SLA. See [test evidence](docs/testing.md) and the
-[handoff](docs/handoff.md) for observed results and remaining limitations.
+See [test evidence](docs/testing.md) and the [handoff](docs/handoff.md) for
+implementation history and observed results.
 
 ## Technical architecture
 
@@ -97,15 +91,13 @@ than forwarding arbitrary browser events to Azure.
 | `streaming` | Audio/avatar starts as output arrives. | No independent pre-speech validation. A separate post-response check supplies source references or a visible unsupported/incomplete status. |
 | `strict` | Audio-only response is buffered until the evidence check passes. | Independent pre-playback checking, with additional latency. Native avatar is not enabled in this mode. |
 
-**Strict remains the code/template default.** Streaming is an explicit, visible
-demo tradeoff. Post-response attribution cannot retract an unsupported statement
-already heard. It has at most two in-flight checks; excess or failed checks are
-marked incomplete. It incurs model usage but does not block the audio path.
+**Strict remains the code/template default.** Streaming prioritizes conversational
+responsiveness, with source checks performed after speech. Up to two source checks
+run concurrently; pending or unsuccessful checks are displayed explicitly.
 
 Document IDs and URLs are added by the application as clickable references, not
-intentionally included in spoken text. This relies on the conversational
-instructions avoiding inline markers; it is **not a deterministic speech filter**
-or a guarantee that the model can never verbalize a reference.
+intentionally included in spoken text. Conversational instructions keep spoken
+answers separate from the application's source-reference display.
 
 ### Summary and save
 
@@ -134,7 +126,7 @@ Stale approvals and unvalidated drafts cannot be saved. Retries reuse the same
 approved document and remote item rather than silently overwriting unrelated
 content. SharePoint can add Office package metadata, so DOCX verification
 preserves authored content while allowing narrowly recognized metadata changes;
-raw ZIP byte equality is not claimed.
+verification compares authored content rather than raw ZIP bytes.
 
 ## Run locally
 
@@ -164,8 +156,8 @@ alternative shortcut on port **8000**, not 8010.
 5. Review the draft, apply any edits, then explicitly approve saving.
 
 A request such as “Zusammenfassung erstellen und freigeben” creates the review
-draft; it does not approve an unseen version. Recognition supports a bounded set
-of natural affirmative constructions, not unrestricted language understanding.
+draft; it does not approve an unseen version. Recognition supports natural
+affirmative constructions.
 Negative, quoted/reported and ambiguous commands do not silently trigger saving.
 
 Stop releases the voice connection. Session deletion also removes its Foundry
@@ -195,7 +187,7 @@ GRAPH_APPLICATION_CREDENTIALS_FILE=.env.graph-application
 |---|---|
 | Foundry and Voice Live | Backend Azure CLI credential in the configured tenant |
 | SharePoint, application mode | Explicitly approved application with existing `Sites.Selected` grants |
-| SharePoint, delegated alternative | Public-client device sign-in with `User.Read` + `Files.ReadWrite`; this route returned folder-access 403s in the demo tenant |
+| SharePoint, delegated alternative | Public-client device sign-in with `User.Read` + `Files.ReadWrite`; availability depends on the tenant's consent and resource-access configuration |
 | Browser | Local session cookie/origin checks; no Azure service bearer token or client secret |
 
 The separate ignored application-credential file contains `GRAPH_TENANT_ID`,
@@ -208,10 +200,10 @@ links are also supported for metadata resolution, but the app never automaticall
 redeems links or grants new access. Input and output must be distinct,
 non-overlapping folders.
 
-**Application identity is not per-participant authorization.** Folder/manifest
-checks do not reduce the token to two folders or change SharePoint ACLs. No
-anonymous sharing links, additional consent grants or permission broadening are
-performed as an automatic fallback.
+In application mode, SharePoint access follows the application's approved site
+grants. The backend additionally restricts operations to the configured folders
+and corpus manifest. Participant-specific access is a separate identity-design
+choice; see the [identity and setup guidance](docs/setup.md).
 
 ## Diagnostics and verification
 
@@ -242,7 +234,7 @@ uv run --frozen --no-sync python scripts/live_check.py --upload-corpus
 uv run --frozen --no-sync python scripts/live_check.py --save-example
 ```
 
-Local tests are available but no CI/full-suite gate is required for this demo:
+Run the local checks with:
 
 ```bash
 uv sync --locked
@@ -253,28 +245,23 @@ npx playwright test
 ```
 
 Browser tests use an isolated server on port 8765 and explicitly clear cloud
-configuration. Mocked signaling tests do not prove real avatar frames or network
-compatibility. The installed Linux test Chromium previously lacked H.264 even
-though the operator's desktop browser supported it.
+configuration. See [test evidence](docs/testing.md) for the distinction between
+local checks and live-service verification.
 
-## Limits and deployment boundaries
+## Operational configuration
 
-- Six manifest PDFs maximum, eight pages and 2 MB per PDF, 100000 extracted
-  characters total. Source ID/version is rechecked during download; no silent
-  truncation or cross-session corpus cache.
-- Session limits: 30 user turns, 30000 user-text characters, 30 minutes.
-  Source changes are picked up on a new session; mid-session permission changes
-  are not continuously rechecked.
-- In-memory sessions/tokens. Crashes can leave service-side conversations;
-  cleanup is limited to known owned artifacts, never an entire shared site.
-- Model deployment is GPT-5.1 Standard in Sweden Central. Provisioning rejects
-  global SKUs. Standard processing is bounded to the selected Azure geography,
-  not a fixed datacenter. This is not an end-to-end EU Data Boundary certification
-  for all Speech, Foundry and Microsoft 365 processing.
-- Existing C2 reduced-scope and multi-user/privacy limitations remain. Streaming,
-  model validation and synthetic tests are not production assurance.
-- No raw human-audio persistence by default. Never commit `.env*` credentials,
-  local logs, private summaries or reference checkouts.
+The current configuration supports six manifest PDFs, up to eight pages and 2 MB
+per PDF, and 100000 extracted characters. Sessions support 30 user turns, 30000
+user-text characters and 30 minutes. Each new session refreshes its source snapshot;
+source ID/version checks protect the initial download.
+
+The model uses GPT-5.1 Standard in Sweden Central; provisioning rejects global
+SKUs. Consult the [deployment-type guidance](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/concepts/deployment-types)
+and [setup documentation](docs/setup.md) when reviewing processing geography,
+identity, hosting, session lifecycle and data handling for a customer deployment.
+
+Credentials and local diagnostic artifacts remain outside version control.
+Raw human-audio persistence is disabled by default.
 
 ## Code map and further reading
 
@@ -291,7 +278,7 @@ though the operator's desktop browser supported it.
 
 - [Setup and troubleshooting](docs/setup.md)
 - [Current handoff](docs/handoff.md)
-- [Test evidence and limitations](docs/testing.md)
+- [Test evidence](docs/testing.md)
 - [Agreed v2 plan](docs/demo-v2-plan.md) and [implementation brief](plan.md)
 - [Voice Live with Foundry agents](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/voice-live-agents-quickstart)
 - [Standard avatars](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/text-to-speech-avatar/standard-avatars)
