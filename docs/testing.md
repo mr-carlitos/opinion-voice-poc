@@ -1,10 +1,80 @@
-# Local Debugging
+# Testing and Local Debugging
 
-Scope: mixed FastAPI API and browser UI, localhost first. The Graph, Foundry,
-Voice Live and reviewed-summary adapters are implemented, but the cloud voicebot
-has not passed live end-to-end acceptance. GitHub Actions and mandatory TDD are
-deferred. Exercise the working demo locally and inspect runtime errors directly;
-use existing focused checks only when helpful. No CI wait or full suite is required.
+Scope: mixed FastAPI API and browser UI, localhost first. The repository includes
+pytest unit/API tests and Playwright desktop/mobile browser tests. GitHub Actions
+workflows are deliberately deferred; all commands below run locally.
+
+## Automated local suite
+
+Requirements: Python 3.12, uv, Node.js/npm and Playwright Chromium. From the
+repository root:
+
+```bash
+uv sync --locked
+npm ci
+npx playwright install chromium
+npm test
+```
+
+On Linux, if browser system libraries are missing, use
+`npx playwright install --with-deps chromium` (system package installation may
+require administrator privileges). Keep port 8765 free: Playwright starts and
+stops its own server and does not reuse an operator's existing application.
+
+| Command | Purpose |
+| --- | --- |
+| `npm test` | Ruff lint/format and JavaScript syntax checks, then all Python and browser tests |
+| `npm run test:python` | All Python tests, with JUnit output |
+| `npm run test:e2e` | All browser tests on desktop and mobile Chromium |
+| `npm run test:coverage` | All Python tests with statement/branch coverage for every module in `app/` and Python script in `scripts/`, including unimported files |
+| `uv run --frozen pytest tests/test_grounding.py -q` | Focused PDF/corpus boundary tests |
+| `npx playwright test tests/e2e/media.spec.js` | Focused browser capture, PCM and playback tests |
+
+Reports are ignored, local artifacts:
+
+- `artifacts/pytest.xml`: Python JUnit results.
+- `artifacts/coverage/index.html`: navigable Python coverage and missing branches.
+- `artifacts/coverage.xml`: machine-readable Python coverage.
+- `artifacts/playwright.xml` and `playwright-report/index.html`: browser results.
+- `test-results/`: failure traces/screenshots.
+
+The pre-expansion baseline passed 233 Python tests and 52 browser cases.
+The 19 October 2026 local run passed lint, 434 Python tests and 70 browser cases;
+combined Python statement/branch coverage increased from 77% to 95%.
+The expanded suite exercises:
+
+| Area | Checks |
+| --- | --- |
+| Configuration and identity | URL/ID parsing, Azure endpoints, folder separation, authentication modes, prompt/token state and permission-review boundaries |
+| Corpus and adapters | Real PDF extraction, manifest/page/text limits, source ownership/version changes, Graph transport failures, upload confirmation/integrity, agent fingerprint reuse and strict model-response schemas |
+| Local API and session state | Mutation cookie/origin guards, privacy headers, ownership, session/turn/text/age limits, deletion, WebSocket reservation/disconnect, versioned edits, validation, frozen saves and retry/concurrency |
+| Voice | Strict versus streaming delivery, queued turns and interruption, invalid browser messages, transcription failure/duplicates, unsupported answers, explicit review approval and bounded/cancelled source checks |
+| Documents and diagnostics | Real DOCX round trips, stored-content comparisons, metadata allowlists, redaction, bounded rotating logs and error reporting |
+| Scripts | Sample PDF/preview generation, mocked model/live-check commands and cleanup, mocked setup/consent boundaries, provisioning preflight with a fake Azure CLI |
+| Browser | Startup/retry, text submission, full simulated review/edit/approval/save/delete journey, source attachment and HTML escaping, PCM conversion/buffering, capture cleanup/failures, audio sequencing/mute, avatar negotiation and responsive/accessibility behavior |
+
+### Isolation and limits
+
+No live credentials, cloud access or real microphone are required. The autouse
+pytest fixture rejects IPv4/IPv6 socket connections; service adapters use doubles
+or `httpx.MockTransport`. Diagnostic/setup functions are tested with fake clients
+and Azure CLI responses, not by invoking live probes. Generated sample files and
+logs stay in pytest temporary directories. The generation tests use Pillow's
+built-in font rather than requiring an OS-installed DejaVu font.
+
+Playwright clears cloud configuration for its real local FastAPI server and
+intercepts service-dependent HTTP/WebSocket journeys. Audio/WebRTC tests use
+synthetic samples and browser API doubles. The PCM worklet test executes the
+actual served processor source in a controlled processor harness; it does not
+claim real microphone or audio-device integration.
+
+Coverage reports measure **Python only**, not JavaScript, Bash or Bicep. A covered
+line is not proof of every possible behavior, model accuracy or service
+compatibility. Remaining branches are visible in the report; the suite does not
+claim 100% coverage. Real Azure/SharePoint access, native avatar transport, human
+audio hardware and infrastructure deployment require separate explicitly approved
+live acceptance. The historical observations below are not results of this local
+suite.
 
 ## Evidence checkpoint — 10 September 2026
 

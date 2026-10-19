@@ -1,7 +1,10 @@
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 
@@ -289,3 +292,125 @@ def test_permission_review_rejects_app_only_access(monkeypatch):
     monkeypatch.setattr(setup_m365, "azure", lambda *args: next(pages))
     with pytest.raises(setup_m365.SetupError, match="app-only permissions"):
         setup_m365.review_grants("owned-principal", "graph-resource")
+
+
+@pytest.mark.parametrize("result", ['{"id":"synthetic"}', "", "failure"])
+def test_azure_cli_wrapper_checks_exit_status_and_json(monkeypatch, result):
+    run = Mock(
+        return_value=SimpleNamespace(
+            returncode=1 if result == "failure" else 0,
+            stdout=result if result != "failure" else "",
+            stderr="Synthetic CLI failure",
+        )
+    )
+    monkeypatch.setattr(setup_m365.subprocess, "run", run)
+    if result == "failure":
+        with pytest.raises(setup_m365.SetupError, match="Synthetic CLI failure"):
+            setup_m365.azure("account", "show")
+    else:
+        assert setup_m365.azure("account", "show") == ({"id": "synthetic"} if result else None)
+    assert run.call_args.args[0] == [
+        "az",
+        "account",
+        "show",
+        "--output",
+        "json",
+        "--only-show-errors",
+    ]
+    assert run.call_args.kwargs["check"] is False
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://graph.microsoft.com/v1.0/items",
+        "https://outside.example/v1.0/items",
+        "https://graph.microsoft.com/beta/items",
+        "https://graph.microsoft.com/v1.0/items#fragment",
+    ],
+)
+def test_permission_review_rejects_untrusted_pagination_before_cli(monkeypatch, url):
+    azure = Mock()
+    monkeypatch.setattr(setup_m365, "azure", azure)
+    with pytest.raises(setup_m365.SetupError, match="Invalid or excessive"):
+        setup_m365.graph_collection(url)
+    azure.assert_not_called()
+
+
+@pytest.mark.parametrize("body", [[], {}, {"value": "not-a-list"}, "cycle"])
+def test_permission_review_fails_on_malformed_or_cyclic_graph_pages(monkeypatch, body):
+    url = "https://graph.microsoft.com/v1.0/items"
+    if body == "cycle":
+        body = {"value": [], "@odata.nextLink": url}
+    azure = Mock(return_value=body)
+    monkeypatch.setattr(setup_m365, "azure", azure)
+    with pytest.raises(setup_m365.SetupError):
+        setup_m365.graph_collection(url)
+    assert azure.call_count == 1
+
+
+def test_setup_rejects_wrong_tenant_before_registration_or_permissions(monkeypatch):
+    azure = Mock(return_value={"tenantId": "other-tenant"})
+    monkeypatch.setattr(setup_m365, "azure", azure)
+    with pytest.raises(setup_m365.SetupError, match="different tenant"):
+        setup_m365.setup("expected-tenant", True)
+    azure.assert_called_once_with("account", "show")
+
+
+def test_apply_creates_only_owned_public_registration_and_principal(monkeypatch, tmp_path):
+    scopes = [{"value": name, "id": name, "isEnabled": True} for name in GRAPH_SCOPES]
+    required = setup_m365.permission_request(scopes)
+    app = {
+        "id": "synthetic-object",
+        "appId": "synthetic-client",
+        "displayName": setup_m365.APP_NAME,
+        "serviceManagementReference": setup_m365.OWNER_MARKER,
+        "signInAudience": "AzureADMyOrg",
+        "isFallbackPublicClient": True,
+        "requiredResourceAccess": required,
+    }
+    commands = []
+
+    def azure(*args):
+        commands.append(args)
+        if args == ("account", "show"):
+            return {"tenantId": "SYNTHETIC-TENANT"}
+        if args[:3] == ("ad", "sp", "show"):
+            return {"id": "graph-resource", "oauth2PermissionScopes": scopes}
+        if args[:3] in (("ad", "app", "list"), ("ad", "sp", "list")):
+            return []
+        if args[:3] == ("ad", "app", "create"):
+            assert json.loads(args[args.index("--required-resource-accesses") + 1]) == required
+            return app
+        if args[:3] == ("ad", "sp", "create"):
+            return {"id": "synthetic-principal"}
+        pytest.fail(f"Unexpected cloud operation: {args}")
+
+    monkeypatch.setattr(setup_m365, "azure", azure)
+    monkeypatch.setattr(setup_m365, "ROOT", tmp_path)
+    setup_m365.setup("synthetic-tenant", True)
+    path = tmp_path / ".local/m365-app.json"
+    state = json.loads(path.read_text())
+    assert state["service_principal_id"] == "synthetic-principal"
+    assert state["admin_consent_granted_by_script"] is False
+    assert path.stat().st_mode & 0o777 == 0o600
+    assert not any("consent" in argument for command in commands for argument in command)
+
+
+@pytest.mark.parametrize("error", [None, setup_m365.SetupError("Synthetic setup failure")])
+def test_setup_cli_passes_explicit_flags_and_reports_expected_errors(monkeypatch, capsys, error):
+    setup = Mock(side_effect=error)
+    monkeypatch.setattr(setup_m365, "setup", setup)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["setup_m365.py", "--tenant-id", "synthetic", "--apply", "--narrow-permissions"],
+    )
+    if error:
+        with pytest.raises(SystemExit) as failure:
+            setup_m365.main()
+        assert failure.value.code == 1
+        assert "Synthetic setup failure" in capsys.readouterr().err
+    else:
+        setup_m365.main()
+    setup.assert_called_once_with("synthetic", True, True)

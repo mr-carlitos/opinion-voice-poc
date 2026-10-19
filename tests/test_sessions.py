@@ -1,4 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime, timedelta
 from threading import Event
 
 import pytest
@@ -131,3 +132,36 @@ def test_unvalidated_or_newly_unvalidated_draft_cannot_be_saved(session):
     with pytest.raises(ServiceError):
         session.save(graph, 3)
     assert graph.uploads == []
+
+
+def test_turn_limit_accepts_thirty_then_rejects_without_mutation(session):
+    for _ in range(30):
+        session.add_turn("Synthetic turn")
+    with pytest.raises(ServiceError, match="Sitzungslimit"):
+        session.add_turn("Not accepted")
+    assert session.user_turns == ["Synthetic turn"] * 30
+
+
+def test_total_text_limit_includes_all_prior_turns(session):
+    session.add_turn("x" * 29_999)
+    session.add_turn("y")
+    with pytest.raises(ServiceError, match="Sitzungslimit"):
+        session.add_turn("z")
+    assert sum(map(len, session.user_turns)) == 30_000
+
+
+def test_expired_session_does_not_record_new_turn(session):
+    session.created_at = datetime.now(UTC) - timedelta(minutes=31)
+    with pytest.raises(ServiceError, match="30 Minuten"):
+        session.add_turn("Not accepted")
+    assert session.user_turns == []
+
+
+def test_saved_snapshot_result_cannot_mutate_authoritative_save_state(session):
+    session.set_draft(draft(), validation_passed=True)
+    session.save(FakeGraph(), 1)
+    snapshot = session.snapshot()
+    snapshot["result"]["item_id"] = "tampered"
+    snapshot["summary"]["haltung"] = "tampered"
+    assert session.snapshot()["result"]["item_id"] == "same-item"
+    assert session.snapshot()["summary"]["haltung"] == "Unentschieden"
