@@ -240,13 +240,17 @@ Run the local checks with:
 uv sync --locked
 npm ci
 npx playwright install chromium
-uv run --frozen --no-sync pytest
-npx playwright test
+npm test
+# Optional: Python statement/branch coverage, including diagnostic scripts:
+npm run test:coverage
 ```
 
 Browser tests use an isolated server on port 8765 and explicitly clear cloud
-configuration. See [test evidence](docs/testing.md) for the distinction between
-local checks and live-service verification.
+configuration. Python tests block IP socket connections and use synthetic service
+doubles. No Azure sign-in or SharePoint writes are needed. Coverage reports are
+written under `artifacts/coverage/` and `artifacts/coverage.xml`.
+See [testing](docs/testing.md) for focused commands, coverage scope and the
+distinction between local checks and live-service verification.
 
 ## Operational configuration
 
