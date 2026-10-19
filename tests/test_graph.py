@@ -1,6 +1,8 @@
 import base64
 from dataclasses import replace
+from datetime import UTC, datetime
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import httpx
 import pytest
@@ -52,6 +54,8 @@ def graph(monkeypatch):
     def handle(request):
         calls.append(request)
         response = responses.pop(0)
+        if isinstance(response, Exception):
+            raise response
         return (
             response if isinstance(response, httpx.Response) else httpx.Response(200, json=response)
         )
@@ -248,3 +252,181 @@ def test_graph_error_rejects_unsafe_code_and_request_id():
     assert SHARING_URL not in str(error)
     assert error.codes == []
     assert error.request_id == "unavailable"
+
+
+@pytest.mark.parametrize("path", ["https://outside.example", "//outside.example", "relative"])
+def test_graph_requests_reject_absolute_or_ambiguous_paths_before_network(graph, path):
+    client, calls, _ = graph
+    with pytest.raises(ValueError, match="relative paths"):
+        client.request("GET", path)
+    assert calls == []
+
+
+def test_optional_missing_item_and_empty_response_are_supported(graph):
+    client, _, responses = graph
+    responses.extend([httpx.Response(404), httpx.Response(204)])
+    assert client.request("GET", "/missing", missing_ok=True) is None
+    assert client.request("DELETE", "/item") == {}
+
+
+@pytest.mark.parametrize("operation", ["request", "download", "upload"])
+def test_transport_failures_return_actionable_service_errors(graph, operation):
+    client, _, responses = graph
+    folder = Folder("drive", "folder", CANONICAL_URL)
+    failure = httpx.ReadTimeout("synthetic private transfer URL")
+    if operation == "request":
+        responses.append(failure)
+
+        def call():
+            return client.request("GET", "/item")
+    elif operation == "download":
+        responses.append(failure)
+
+        def call():
+            return client.download(
+                folder,
+                {"size": 3, "@microsoft.graph.downloadUrl": "https://demo.sharepoint.com/file"},
+            )
+    else:
+        responses.extend(
+            [
+                httpx.Response(404),
+                {"uploadUrl": "https://demo.sharepoint.com/upload"},
+                failure,
+            ]
+        )
+
+        def call():
+            return client.upload(folder, "D01.pdf", b"pdf")
+
+    with pytest.raises(ServiceError) as caught:
+        call()
+    assert "synthetic private" not in str(caught.value)
+
+
+@pytest.mark.parametrize("filename", [".hidden", "../outside.pdf", "a/b.pdf", "x" * 161])
+def test_child_rejects_unsafe_filenames(graph, filename):
+    client, calls, _ = graph
+    with pytest.raises(ValueError, match="Dateiname"):
+        client.child(Folder("drive", "folder", CANONICAL_URL), filename)
+    assert calls == []
+
+
+@pytest.mark.parametrize("size", [None, 2_000_001])
+def test_download_requires_bounded_metadata_before_any_transfer(graph, size):
+    client, calls, _ = graph
+    item = {} if size is None else {"size": size}
+    with pytest.raises(ServiceError, match="Groessenlimit"):
+        client.download(Folder("drive", "folder", CANONICAL_URL), item)
+    assert calls == []
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://demo.sharepoint.com/file",
+        "https://outside.example/file",
+        "https://demo.sharepoint.com.attacker.example/file",
+        "https://user@demo.sharepoint.com/file",
+        "https://demo.sharepoint.com:444/file",
+    ],
+)
+def test_transfer_url_must_remain_on_supported_https_hosts(url):
+    with pytest.raises(ServiceError, match="uebertragungsadresse"):
+        Graph.validate_transfer_url(url)
+
+
+@pytest.mark.parametrize("outcome", ["success", "status", "metadata", "size", "word-content"])
+def test_new_upload_requires_explicit_confirmation_and_content_consistency(graph, outcome):
+    client, calls, responses = graph
+    item = {
+        "id": "owned-item",
+        "webUrl": CANONICAL_URL + "/result",
+        "size": 3,
+        "@microsoft.graph.downloadUrl": "https://demo.sharepoint.com/download",
+    }
+    if outcome == "metadata":
+        item.pop("id")
+    if outcome == "size":
+        item["size"] = 4
+    responses.extend(
+        [
+            httpx.Response(404),
+            {"uploadUrl": "https://demo.sharepoint.com/upload"},
+            httpx.Response(202 if outcome == "status" else 201, json=item),
+        ]
+    )
+    if outcome == "word-content":
+        responses.append(httpx.Response(200, content=b"changed"))
+    filename = "result.docx" if outcome == "word-content" else "D01.pdf"
+    if outcome == "success":
+        assert client.upload(Folder("drive", "folder", CANONICAL_URL), filename, b"pdf") == item
+    else:
+        with pytest.raises(ServiceError):
+            client.upload(Folder("drive", "folder", CANONICAL_URL), filename, b"pdf")
+    assert calls[1].method == "POST"
+    assert calls[2].method == "PUT"
+    assert "authorization" not in calls[2].headers
+    assert calls[2].headers["content-range"] == "bytes 0-2/3"
+
+
+def test_connection_scopes_cannot_be_nested_and_close_idempotently(graph):
+    client, _, _ = graph
+    with client:
+        with pytest.raises(RuntimeError, match="already open"):
+            client.__enter__()
+    client.__exit__()
+    assert client._client is None
+
+
+def test_folder_resolution_rejects_missing_parent_and_invalid_configuration(graph):
+    client, calls, responses = graph
+    with pytest.raises(ServiceError):
+        client.resolve_folder("invalid")
+    assert calls == []
+    responses.append({key: value for key, value in ITEM.items() if key != "parentReference"})
+    with pytest.raises(ServiceError, match="Laufwerk-ID"):
+        client.resolve_folder(SHARING_URL)
+
+
+@pytest.mark.parametrize("invalid", ["same-ids", "invalid-canonical"])
+def test_folder_separation_requires_distinct_ids_and_valid_canonical_urls(invalid):
+    source = Folder("drive", "input", CANONICAL_URL)
+    output = (
+        Folder("drive", "input", CANONICAL_URL + "-other")
+        if invalid == "same-ids"
+        else Folder("drive", "output", "https://outside.example/path")
+    )
+    with pytest.raises(ServiceError):
+        ensure_separate_folders(source, output)
+
+
+def test_device_prompt_snapshot_and_start_are_safe_and_idempotent(monkeypatch, settings):
+    monkeypatch.setattr(graph_module, "DeviceCodeCredential", Mock())
+    thread = Mock()
+    monkeypatch.setattr(graph_module.threading, "Thread", thread)
+    auth = GraphAuth(settings)
+    assert auth.start()["status"] == "starting"
+    thread.assert_called_once_with(target=auth.authenticate, daemon=True)
+    thread.return_value.start.assert_called_once()
+    expires = datetime(2026, 1, 1, tzinfo=UTC)
+    auth.prompt("https://microsoft.com/devicelogin", "SYNTHETIC", expires)
+    state = auth.start()
+    assert state["status"] == "pending"
+    assert state["expires_at"] == expires.isoformat()
+    state["status"] = "mutated"
+    assert auth.snapshot()["status"] == "pending"
+    assert thread.call_count == 1
+
+
+def test_delegated_auth_without_credential_fails_closed(monkeypatch, settings):
+    monkeypatch.setattr(graph_module, "DeviceCodeCredential", Mock())
+    auth = GraphAuth(settings)
+    auth.credential = None
+    auth.authenticate()
+    assert auth.snapshot()["status"] == "error"
+    assert auth.owner is None
+    with pytest.raises(ServiceError, match="Authentifizierung fehlgeschlagen"):
+        auth.token()
+    with pytest.raises(ValueError, match="Authentifizierungsmodus"):
+        GraphAuth(replace(settings, graph_auth_mode="unsupported"))
